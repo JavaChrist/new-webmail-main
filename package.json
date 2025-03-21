@@ -1,0 +1,52 @@
+{
+  "name": "new-webmail",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.0",
+    "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-switch": "^1.1.3",
+    "@radix-ui/react-toast": "^1.2.6",
+    "@tinymce/tinymce-react": "^6.0.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/imap": "^0.8.42",
+    "@types/mailparser": "^3.4.5",
+    "@types/nodemailer": "^6.4.17",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "crypto-js": "^4.2.0",
+    "date-fns": "^4.1.0",
+    "firebase": "^11.4.0",
+    "firebase-admin": "^13.2.0",
+    "imap": "^0.8.19",
+    "lucide-react": "^0.483.0",
+    "mailparser": "^3.7.2",
+    "next": "15.2.3",
+    "nodemailer": "^6.10.0",
+    "react": "^19.0.0",
+    "react-big-calendar": "^1.18.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.4.0",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4.0.14",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.12",
+    "@types/react-big-calendar": "^1.16.1",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.17",
+    "eslint": "^9",
+    "eslint-config-next": "15.2.3",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}

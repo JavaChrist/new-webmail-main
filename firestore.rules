@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fonction pour vérifier si l'utilisateur est authentifié
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Fonction pour vérifier si l'utilisateur est le propriétaire
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Règles spécifiques pour emailSettings
+    match /emailSettings/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+
+    // Règles spécifiques pour emails
+    match /emails/{emailId} {
+      allow read, write: if isAuthenticated() && (
+        resource == null || 
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // Règles pour les autres collections
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Les règles spécifiques seront réactivées après le débogage
+    // match /emailSettings/{userId} {
+    //   allow read, write: if isAuthenticated() && isOwner(userId);
+    // }
+
+    // match /emails/{emailId} {
+    //   allow read, write: if isAuthenticated() && (
+    //     isOwner(resource.data.userId) || 
+    //     (request.method == 'create' && isOwner(request.resource.data.userId))
+    //   );
+    // }
+
+    // match /events/{eventId} {
+    //   allow read, write: if isAuthenticated() && (
+    //     isOwner(resource.data.userId) || 
+    //     (request.method == 'create' && isOwner(request.resource.data.userId))
+    //   );
+    // }
+
+    // match /contacts/{contactId} {
+    //   allow read, write: if isAuthenticated() && (
+    //     isOwner(resource.data.userId) || 
+    //     (request.method == 'create' && isOwner(request.resource.data.userId))
+    //   );
+    // }
+  }
+} 
