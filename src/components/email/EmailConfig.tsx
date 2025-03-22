@@ -178,44 +178,29 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
     setSuccess(null);
 
     try {
-      // Utiliser l'ID de l'utilisateur comme ID du document
       const userId = auth.currentUser.uid;
-
-      // Préparer les données à sauvegarder
-      const configData = {
-        email: settings.email,
-        password: encryptPassword(settings.password),
-        smtp: {
-          host: settings.smtpHost,
-          port: Number(settings.smtpPort),
-          secure: Boolean(settings.smtpSecure),
-          user: settings.email,
-        },
-        imap: {
-          host: settings.imapHost,
-          port: Number(settings.imapPort),
-          secure: Boolean(settings.imapSecure),
-          user: settings.email,
-        },
-        updatedAt: new Date().toISOString(),
-      };
-
-      console.log("Configuration à sauvegarder:", {
-        email: configData.email,
-        hasPassword: !!configData.password,
-        smtp: {
-          host: configData.smtp.host,
-          port: configData.smtp.port,
-          secure: configData.smtp.secure,
-          user: configData.smtp.user,
-        },
-      });
+      const encryptedPassword = encryptPassword(settings.password);
 
       // Sauvegarder dans Firestore
-      await setDoc(doc(db, "emailSettings", userId), configData);
+      await setDoc(doc(db, "emailSettings", userId), {
+        email: settings.email,
+        password: encryptedPassword,
+        smtpHost: settings.smtpHost,
+        smtpPort: Number(settings.smtpPort),
+        smtpSecure: Boolean(settings.smtpSecure),
+        imapHost: settings.imapHost,
+        imapPort: Number(settings.imapPort),
+        imapSecure: Boolean(settings.imapSecure),
+        updatedAt: new Date().toISOString(),
+      });
 
-      setSuccess("Configuration enregistrée avec succès");
-      setTimeout(() => onClose(), 1500);
+      setSuccess("Configuration sauvegardée avec succès");
+
+      // Tester la connexion après la sauvegarde
+      await testConnection();
+
+      // Fermer la modal si tout est OK
+      onClose();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
       setError(

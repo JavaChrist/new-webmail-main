@@ -45,7 +45,21 @@ interface ContactModalProps {
   onSave: (contact: Contact) => void;
   onDelete?: (contact: Contact) => void;
   selectedContact?: Contact;
+  isDarkMode?: boolean;
 }
+
+const defaultContact: Contact = {
+  nom: "",
+  prenom: "",
+  email: "",
+  telephone: "",
+  entreprise: "",
+  adresse: "",
+  codePostal: "",
+  ville: "",
+  notes: "",
+  categorie: "personal",
+};
 
 export default function ContactModal({
   isOpen,
@@ -53,47 +67,57 @@ export default function ContactModal({
   onSave,
   onDelete,
   selectedContact,
+  isDarkMode = true,
 }: ContactModalProps) {
-  const [contact, setContact] = useState<Contact>({
-    nom: "",
-    prenom: "",
-    email: "",
-    telephone: "",
-    entreprise: "",
-    adresse: "",
-    codePostal: "",
-    ville: "",
-    notes: "",
-    categorie: "personal",
-  });
+  const [contact, setContact] = useState<Contact>(defaultContact);
 
   useEffect(() => {
     if (selectedContact) {
       setContact(selectedContact);
     } else {
-      setContact({
-        nom: "",
-        prenom: "",
-        email: "",
-        telephone: "",
-        entreprise: "",
-        adresse: "",
-        codePostal: "",
-        ville: "",
-        notes: "",
-        categorie: "personal",
-      });
+      setContact(defaultContact);
     }
-  }, [selectedContact]);
+  }, [selectedContact, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(contact);
+    // Formatage final des données avant sauvegarde
+    const formattedContact = {
+      ...contact,
+      nom: contact.nom.toUpperCase(),
+      email: contact.email.toLowerCase(),
+    };
+    await onSave(formattedContact);
+    setContact(defaultContact);
+    onClose();
+  };
+
+  const handleInputChange = (field: keyof Contact, value: string) => {
+    let formattedValue = value;
+    if (field === "nom") {
+      formattedValue = value.toUpperCase();
+    } else if (field === "email") {
+      formattedValue = value.toLowerCase();
+    }
+    setContact({ ...contact, [field]: formattedValue });
+  };
+
+  const handleClose = () => {
+    setContact(defaultContact);
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    if (onDelete) {
+      await onDelete(contact);
+      setContact(defaultContact);
+      onClose();
+    }
   };
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={handleClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -117,15 +141,25 @@ export default function ContactModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+              <Dialog.Panel
+                className={`w-full max-w-2xl transform overflow-hidden rounded-2xl ${
+                  isDarkMode ? "bg-gray-800" : "bg-white"
+                } p-6 text-left align-middle shadow-xl transition-all`}
+              >
                 <Dialog.Title
                   as="h3"
-                  className="text-lg font-medium leading-6 text-gray-900 flex justify-between items-center"
+                  className={`text-lg font-medium leading-6 ${
+                    isDarkMode ? "text-white" : "text-gray-900"
+                  } flex justify-between items-center`}
                 >
                   {selectedContact ? "Modifier le contact" : "Nouveau contact"}
                   <button
-                    onClick={onClose}
-                    className="text-gray-400 hover:text-gray-500"
+                    onClick={handleClose}
+                    className={`${
+                      isDarkMode
+                        ? "text-gray-400 hover:text-gray-300"
+                        : "text-gray-400 hover:text-gray-500"
+                    }`}
                   >
                     <X size={20} />
                   </button>
@@ -134,125 +168,190 @@ export default function ContactModal({
                 <form onSubmit={handleSubmit} className="mt-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Nom
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
+                        Nom *
                       </label>
                       <input
                         type="text"
                         required
                         value={contact.nom}
                         onChange={(e) =>
-                          setContact({ ...contact, nom: e.target.value })
+                          handleInputChange("nom", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
                         Prénom
                       </label>
                       <input
                         type="text"
-                        required
                         value={contact.prenom}
                         onChange={(e) =>
-                          setContact({ ...contact, prenom: e.target.value })
+                          handleInputChange("prenom", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
                         Email
                       </label>
                       <input
                         type="email"
-                        required
                         value={contact.email}
                         onChange={(e) =>
-                          setContact({ ...contact, email: e.target.value })
+                          handleInputChange("email", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
                         Téléphone
                       </label>
                       <input
                         type="tel"
-                        required
                         value={contact.telephone}
                         onChange={(e) =>
-                          setContact({ ...contact, telephone: e.target.value })
+                          handleInputChange("telephone", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label
+                      className={`block text-sm font-medium ${
+                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
                       Entreprise
                     </label>
                     <input
                       type="text"
                       value={contact.entreprise}
                       onChange={(e) =>
-                        setContact({ ...contact, entreprise: e.target.value })
+                        handleInputChange("entreprise", e.target.value)
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className={`mt-1 block w-full rounded-md ${
+                        isDarkMode
+                          ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                          : "bg-white border-gray-300 text-gray-900"
+                      } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label
+                      className={`block text-sm font-medium ${
+                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
                       Adresse
                     </label>
                     <input
                       type="text"
                       value={contact.adresse}
                       onChange={(e) =>
-                        setContact({ ...contact, adresse: e.target.value })
+                        handleInputChange("adresse", e.target.value)
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className={`mt-1 block w-full rounded-md ${
+                        isDarkMode
+                          ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                          : "bg-white border-gray-300 text-gray-900"
+                      } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
                         Code postal
                       </label>
                       <input
                         type="text"
                         value={contact.codePostal}
                         onChange={(e) =>
-                          setContact({ ...contact, codePostal: e.target.value })
+                          handleInputChange("codePostal", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label
+                        className={`block text-sm font-medium ${
+                          isDarkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
                         Ville
                       </label>
                       <input
                         type="text"
                         value={contact.ville}
                         onChange={(e) =>
-                          setContact({ ...contact, ville: e.target.value })
+                          handleInputChange("ville", e.target.value)
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className={`mt-1 block w-full rounded-md ${
+                          isDarkMode
+                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            : "bg-white border-gray-300 text-gray-900"
+                        } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label
+                      className={`block text-sm font-medium ${
+                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
                       Catégorie
                     </label>
                     <select
@@ -264,7 +363,11 @@ export default function ContactModal({
                             .value as keyof typeof contactCategories,
                         })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className={`mt-1 block w-full rounded-md ${
+                        isDarkMode
+                          ? "bg-gray-700 border-gray-600 text-white"
+                          : "bg-white border-gray-300 text-gray-900"
+                      } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                     >
                       {Object.entries(contactCategories).map(
                         ([key, { label }]) => (
@@ -277,16 +380,24 @@ export default function ContactModal({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label
+                      className={`block text-sm font-medium ${
+                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
                       Notes
                     </label>
                     <textarea
                       value={contact.notes}
                       onChange={(e) =>
-                        setContact({ ...contact, notes: e.target.value })
+                        handleInputChange("notes", e.target.value)
                       }
                       rows={3}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className={`mt-1 block w-full rounded-md ${
+                        isDarkMode
+                          ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                          : "bg-white border-gray-300 text-gray-900"
+                      } shadow-sm focus:border-blue-500 focus:ring-blue-500`}
                     />
                   </div>
 
@@ -294,16 +405,24 @@ export default function ContactModal({
                     {selectedContact && onDelete && (
                       <button
                         type="button"
-                        onClick={() => onDelete(contact)}
-                        className="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                        onClick={handleDelete}
+                        className={`inline-flex justify-center rounded-md border border-transparent ${
+                          isDarkMode
+                            ? "bg-red-600 hover:bg-red-700 text-white"
+                            : "bg-red-600 hover:bg-red-700 text-white"
+                        } px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2`}
                       >
                         Supprimer
                       </button>
                     )}
                     <button
                       type="button"
-                      onClick={onClose}
-                      className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      onClick={handleClose}
+                      className={`inline-flex justify-center rounded-md border ${
+                        isDarkMode
+                          ? "border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600"
+                          : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                      } px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}
                     >
                       Annuler
                     </button>

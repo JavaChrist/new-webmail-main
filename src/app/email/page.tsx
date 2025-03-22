@@ -30,10 +30,11 @@ import { db, auth } from "@/config/firebase";
 import { useRouter } from "next/navigation";
 import ComposeModal from "@/components/email/ComposeModal";
 import EmailView from "@/components/email/EmailView";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import EmailConfig from "@/components/email/EmailConfig";
 import * as Toast from "@radix-ui/react-toast";
+import { useNewEmailStore } from "@/store/emailStore";
 
 interface Email {
   id: string;
@@ -73,6 +74,8 @@ export default function EmailPage() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const { to, subject, content, resetNewEmail, setNewEmail } =
+    useNewEmailStore();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -88,6 +91,14 @@ export default function EmailPage() {
 
     return () => unsubscribe();
   }, [router, selectedFolder]);
+
+  useEffect(() => {
+    if (to) {
+      setIsComposeOpen(true);
+      setNewEmail(to, subject, content);
+      resetNewEmail();
+    }
+  }, [to, subject, content, setNewEmail, resetNewEmail]);
 
   const loadEmails = async () => {
     if (!auth.currentUser) return;
@@ -303,6 +314,25 @@ export default function EmailPage() {
     { id: "trash", label: "Corbeille", icon: Trash2 },
   ];
 
+  const getUnreadCount = (folder: string) => {
+    return emails.filter((email) => email.folder === folder && !email.read)
+      .length;
+  };
+
+  const formatEmailDate = (date: Date) => {
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const isThisYear = date.getFullYear() === now.getFullYear();
+
+    if (isToday) {
+      return format(date, "HH:mm", { locale: fr });
+    } else if (isThisYear) {
+      return format(date, "d MMM", { locale: fr });
+    } else {
+      return format(date, "dd/MM/yyyy", { locale: fr });
+    }
+  };
+
   const filteredEmails = emails.filter(
     (email) =>
       email.folder === selectedFolder &&
@@ -336,16 +366,18 @@ export default function EmailPage() {
         }),
       });
 
-      // Vérifier si la réponse est de type JSON
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("La réponse du serveur n'est pas au format JSON");
-      }
-
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Erreur lors de la synchronisation");
+        if (data.error === "Configuration email non trouvée") {
+          setToastMessage(
+            "Bienvenue ! Pour commencer, configurez votre compte email en cliquant sur le bouton Configuration"
+          );
+          setIsConfigOpen(true);
+        } else {
+          throw new Error(data.error || "Erreur lors de la synchronisation");
+        }
+        return;
       }
 
       // Recharger les emails après la synchronisation
@@ -365,6 +397,25 @@ export default function EmailPage() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const cleanHtmlContent = (content: string): string => {
+    // Supprimer les balises DOCTYPE, html, head, etc.
+    content = content
+      .replace(/<\!DOCTYPE[^>]*>/i, "")
+      .replace(/<html[^>]*>/i, "")
+      .replace(/<\/html>/i, "")
+      .replace(/<head>.*?<\/head>/is, "")
+      .replace(/<body[^>]*>/i, "")
+      .replace(/<\/body>/i, "");
+
+    // Supprimer toutes les balises HTML restantes
+    content = content.replace(/<[^>]*>/g, "");
+
+    // Supprimer les espaces multiples et les retours à la ligne
+    content = content.replace(/\s+/g, " ").trim();
+
+    return content;
   };
 
   return (
@@ -406,7 +457,7 @@ export default function EmailPage() {
             <button
               key={folder.id}
               onClick={() => setSelectedFolder(folder.id as Folder)}
-              className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
+              className={`w-full flex items-center justify-between p-2 rounded-lg mb-1 transition-colors ${
                 selectedFolder === folder.id
                   ? "bg-blue-600 text-white"
                   : isDarkMode
@@ -414,8 +465,15 @@ export default function EmailPage() {
                   : "hover:bg-gray-200"
               }`}
             >
-              <folder.icon size={20} />
-              <span>{folder.label}</span>
+              <div className="flex items-center gap-2">
+                <folder.icon size={20} />
+                <span>{folder.label}</span>
+              </div>
+              {folder.id === "inbox" && getUnreadCount("inbox") > 0 && (
+                <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+                  {getUnreadCount("inbox")}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -511,16 +569,17 @@ export default function EmailPage() {
                       >
                         <Star size={20} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="truncate">{email.from}</span>
-                          <span className="text-sm text-gray-500">
-                            {new Date(email.timestamp).toLocaleDateString()}
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="truncate max-w-[200px] font-medium">
+                            {email.from}
+                          </span>
+                          <span className="flex-shrink-0 text-sm text-gray-500 ml-auto">
+                            {formatEmailDate(new Date(email.timestamp))}
                           </span>
                         </div>
-                        <div className="truncate">{email.subject}</div>
-                        <div className="text-sm text-gray-500 truncate">
-                          {email.content}
+                        <div className="text-sm truncate max-w-full pr-4">
+                          {email.subject}
                         </div>
                       </div>
                     </div>
