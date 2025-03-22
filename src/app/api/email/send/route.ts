@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/config/firebase-admin";
 import nodemailer from "nodemailer";
 import CryptoJS from "crypto-js";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/config/firebase-admin";
 
 const decryptPassword = (encryptedPassword: string) => {
   try {
@@ -82,8 +84,11 @@ export async function POST(request: Request) {
       const decryptedPassword = decryptPassword(emailSettings.password);
       console.log("8. Mot de passe décrypté avec succès");
 
-      // Créer le transporteur SMTP
-      const transportConfig = {
+      if (!decryptedPassword) {
+        throw new Error("Échec du décryptage du mot de passe");
+      }
+
+      const transporter = nodemailer.createTransport({
         host: emailSettings.smtp.host,
         port: emailSettings.smtp.port,
         secure: emailSettings.smtp.secure,
@@ -91,22 +96,10 @@ export async function POST(request: Request) {
           user: emailSettings.smtp.user,
           pass: decryptedPassword,
         },
-      };
-      console.log("9. Configuration du transporteur:", {
-        host: transportConfig.host,
-        port: transportConfig.port,
-        secure: transportConfig.secure,
-        auth: { user: transportConfig.auth.user },
       });
 
-      const transporter = nodemailer.createTransport(transportConfig);
-
-      // Vérifier la connexion SMTP
-      console.log("10. Vérification de la connexion SMTP");
       await transporter.verify();
-      console.log("11. Connexion SMTP vérifiée avec succès");
 
-      // Préparer les options d'email
       const mailOptions = {
         from: emailSettings.smtp.user,
         to,
@@ -131,18 +124,18 @@ export async function POST(request: Request) {
       await transporter.sendMail(mailOptions);
       console.log("13. Email envoyé avec succès");
 
-      // Mettre à jour le statut de l'email dans Firestore
-      console.log("14. Mise à jour du statut de l'email:", emailId);
-      await adminDb.collection("emails").doc(emailId).update({
-        status: "sent",
-        sentAt: new Date().toISOString(),
-      });
-      console.log("15. Statut de l'email mis à jour avec succès");
+      if (emailId) {
+        await updateDoc(doc(db, "emails", emailId), {
+          status: "sent",
+          sentAt: new Date().toISOString(),
+        });
+        console.log("15. Statut de l'email mis à jour avec succès");
+      }
 
       return NextResponse.json({ success: true });
-    } catch (error) {
-      console.error("Erreur détaillée:", error);
-      throw error;
+    } catch (error: any) {
+      console.error("Erreur lors de l'envoi de l'email:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
   } catch (error) {
     console.error("Erreur détaillée lors de l'envoi de l'email:", error);

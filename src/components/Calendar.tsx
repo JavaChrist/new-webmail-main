@@ -253,6 +253,7 @@ export default function MyCalendar() {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de l'événement:", error);
+      throw error;
     }
   };
 
@@ -264,6 +265,7 @@ export default function MyCalendar() {
       setEvents(events.filter((event) => event.id !== eventToDelete.id));
     } catch (error) {
       console.error("Erreur lors de la suppression de l'événement:", error);
+      throw error;
     }
   };
 
@@ -289,7 +291,10 @@ export default function MyCalendar() {
     event: ({ event, title }: { event: CalendarEvent; title: string }) => {
       const Icon = categories[event.category].icon;
       return (
-        <div className="flex items-center gap-1 h-full w-full pl-1 event-content">
+        <div
+          key={event.id}
+          className="flex items-center gap-1 h-full w-full pl-1 event-content"
+        >
           <Icon size={14} className="flex-shrink-0" />
           <span className="truncate">{title}</span>
         </div>
@@ -301,6 +306,7 @@ export default function MyCalendar() {
         const Icon = categories[event.category].icon;
         return (
           <div
+            key={event.id}
             className="flex items-center gap-2 py-1 px-2 rounded event-item"
             style={{
               backgroundColor: priorityColors[event.priority],

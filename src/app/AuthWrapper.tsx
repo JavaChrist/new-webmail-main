@@ -23,15 +23,31 @@ export default function AuthWrapper({
 
       if (!currentUser && pathname !== "/login") {
         router.push("/login");
-      } else if (currentUser && (pathname === "/login" || pathname === "/")) {
-        router.push("/app");
       }
     });
 
     return () => unsubscribe();
   }, [router, pathname]);
 
-  if (loading) return <p className="text-center text-white">Chargement...</p>;
+  // Pendant le chargement initial, on affiche un écran de chargement
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Si l'utilisateur n'est pas connecté et qu'on n'est pas sur la page de login
+  if (!user && pathname !== "/login") {
+    return null;
+  }
+
+  // Si l'utilisateur est connecté et qu'il est sur la page de login
+  if (user && pathname === "/login") {
+    router.push("/");
+    return null;
+  }
 
   return (
     <div className="flex flex-1">

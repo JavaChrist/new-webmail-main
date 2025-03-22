@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
 import Imap from "imap";
-import { ParsedMail, simpleParser } from "mailparser";
-import { adminApp, adminDb, adminAuth } from "@/config/firebase-admin";
+import { simpleParser } from "mailparser";
+import { adminApp, adminDb } from "@/config/firebase-admin";
 import CryptoJS from "crypto-js";
+import { doc, getDoc } from "firebase/firestore";
 
 const decryptPassword = (encryptedPassword: string) => {
   try {
     if (!process.env.ENCRYPTION_KEY) {
-      console.error(
-        "ENCRYPTION_KEY n'est pas définie dans les variables d'environnement"
-      );
       throw new Error("Clé de chiffrement non définie");
     }
 
-    // Déchiffrement simple
     const bytes = CryptoJS.AES.decrypt(
       encryptedPassword,
       process.env.ENCRYPTION_KEY
@@ -21,17 +18,12 @@ const decryptPassword = (encryptedPassword: string) => {
     const result = bytes.toString(CryptoJS.enc.Utf8);
 
     if (!result) {
-      console.error("Le déchiffrement a produit une chaîne vide");
       throw new Error("Le déchiffrement a échoué");
     }
 
     return result;
   } catch (error) {
     console.error("Erreur lors du décryptage:", error);
-    console.error(
-      "Encrypted password (premiers caractères):",
-      encryptedPassword.substring(0, 20)
-    );
     throw new Error(
       `Erreur lors du décryptage du mot de passe: ${error.message}`
     );
@@ -71,94 +63,43 @@ const cleanEmailData = (email: any) => {
 };
 
 export async function POST(request: Request) {
-  console.log("🚀 Début de la requête de synchronisation");
-
   try {
-    // Vérifier le token d'authentification
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.error("❌ Token d'authentification manquant");
-      return NextResponse.json(
-        { error: "Token d'authentification requis" },
-        { status: 401 }
-      );
+    const { userId } = await request.json();
+
+    if (!userId) {
+      throw new Error("UserId manquant");
     }
 
-    const token = authHeader.split("Bearer ")[1];
-    let decodedToken;
-    try {
-      decodedToken = await adminAuth.verifyIdToken(token);
-      console.log("✅ Token vérifié pour userId:", decodedToken.uid);
-    } catch (error) {
-      console.error("❌ Erreur de vérification du token:", error);
-      return NextResponse.json(
-        { error: "Token d'authentification invalide" },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
-    const userId = body.userId;
-
-    if (!userId || userId !== decodedToken.uid) {
-      console.error("❌ UserId invalide ou ne correspond pas au token");
-      return NextResponse.json({ error: "UserId invalide" }, { status: 400 });
-    }
-
-    console.log("📧 Récupération des paramètres email pour userId:", userId);
-    const settingsDoc = await adminDb
-      .collection("emailSettings")
+    const emailConfigDoc = await adminDb
+      .collection("emailConfigs")
       .doc(userId)
       .get();
 
-    if (!settingsDoc.exists) {
-      console.error("❌ Configuration email non trouvée pour userId:", userId);
-      return NextResponse.json(
-        { error: "Configuration email non trouvée" },
-        { status: 404 }
-      );
+    if (!emailConfigDoc.exists) {
+      throw new Error("Configuration email non trouvée");
     }
 
-    const settings = settingsDoc.data();
-    if (!settings?.email || !settings?.password) {
-      console.error("❌ Configuration email incomplète:", {
-        hasEmail: !!settings?.email,
-        hasPassword: !!settings?.password,
-      });
-      return NextResponse.json(
-        { error: "Configuration email incomplète" },
-        { status: 400 }
-      );
+    const emailConfig = emailConfigDoc.data();
+    const decryptedPassword = decryptPassword(emailConfig.password);
+
+    if (!decryptedPassword) {
+      throw new Error("Échec du décryptage du mot de passe");
     }
 
-    console.log("🔐 Tentative de déchiffrement du mot de passe");
-    const password = await decryptPassword(settings.password);
-    console.log("✅ Mot de passe déchiffré avec succès");
-
-    // Configuration IMAP
     const imapConfig = {
-      user: settings.email,
-      password: password,
-      host: settings.imapHost || "imap.ionos.fr",
-      port: settings.imapPort || 993,
-      tls: settings.imapSecure ?? true,
+      user: emailConfig.email,
+      password: decryptedPassword,
+      host: emailConfig.imapHost,
+      port: emailConfig.imapPort,
+      tls: emailConfig.imapSecure,
       tlsOptions: { rejectUnauthorized: false },
     };
-
-    console.log("📨 Configuration IMAP:", {
-      user: imapConfig.user,
-      host: imapConfig.host,
-      port: imapConfig.port,
-      tls: imapConfig.tls,
-    });
 
     // Fonction pour récupérer les emails
     const fetchEmails = () => {
       return new Promise((resolve, reject) => {
         const imap = new Imap(imapConfig);
         const emails: any[] = [];
-        let completed = 0;
-        let totalMessages = 0;
 
         imap.once("ready", () => {
           imap.openBox("INBOX", false, (err, box) => {
@@ -184,7 +125,6 @@ export async function POST(request: Request) {
                 return;
               }
 
-              totalMessages = results.length;
               const fetch = imap.fetch(results, {
                 bodies: "",
                 struct: true,
@@ -202,43 +142,29 @@ export async function POST(request: Request) {
                         content:
                           parsed.html || parsed.textAsHtml || parsed.text,
                         timestamp: parsed.date,
-                        userId: userId,
-                        read: false,
-                        starred: false,
-                        folder: "inbox",
+                        flags: msg.flags,
                       };
-
                       emails.push(email);
-                      completed++;
-
-                      if (completed === totalMessages) {
-                        imap.end();
-                        resolve(emails);
-                      }
                     },
                     (error) => {
-                      console.error("Erreur parsing email:", error);
-                      completed++;
-                      if (completed === totalMessages) {
-                        imap.end();
-                        resolve(emails);
-                      }
+                      console.error(
+                        "Erreur lors du traitement d'un email:",
+                        error
+                      );
                     }
                   );
                 });
               });
 
               fetch.once("error", (err) => {
-                console.error("Erreur fetch:", err);
+                console.error("Erreur lors de la récupération:", err);
                 imap.end();
                 reject(err);
               });
 
               fetch.once("end", () => {
-                if (completed === totalMessages) {
-                  imap.end();
-                  resolve(emails);
-                }
+                imap.end();
+                resolve(emails);
               });
             });
           });
@@ -249,57 +175,14 @@ export async function POST(request: Request) {
           reject(err);
         });
 
-        imap.once("end", () => {
-          if (completed === totalMessages) {
-            resolve(emails);
-          }
-        });
-
         imap.connect();
       });
     };
 
-    // Récupérer les emails
     const emails = await fetchEmails();
-
-    // Vérifier les emails existants
-    const existingEmailsSnapshot = await adminDb
-      .collection("emails")
-      .where("userId", "==", userId)
-      .get();
-
-    const existingMessageIds = new Set(
-      existingEmailsSnapshot.docs.map((doc) => doc.data().messageId)
-    );
-
-    // Filtrer les nouveaux emails
-    const newEmails = emails.filter(
-      (email) => !existingMessageIds.has(email.messageId)
-    );
-
-    // Sauvegarder les nouveaux emails
-    if (newEmails.length > 0) {
-      const batch = adminDb.batch();
-      for (const email of newEmails) {
-        const newEmailRef = adminDb.collection("emails").doc();
-        batch.set(newEmailRef, email);
-      }
-      await batch.commit();
-    }
-
-    return NextResponse.json({
-      message: `${newEmails.length} nouveaux emails synchronisés`,
-      totalEmails: emails.length,
-    });
-  } catch (error) {
-    console.error("❌ Erreur détaillée:", error);
-    console.error("Stack trace:", error.stack);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Erreur inconnue",
-        details: error instanceof Error ? error.stack : undefined,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ emails });
+  } catch (error: any) {
+    console.error("Erreur lors de la synchronisation:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

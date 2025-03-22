@@ -172,7 +172,7 @@ export default function EventModal({
               {Object.entries(categories).map(
                 ([key, { icon: Icon, label }]) => (
                   <button
-                    key={key}
+                    key={`category-${key}`}
                     type="button"
                     onClick={() => setCategory(key as typeof category)}
                     className={`p-3 rounded-lg flex items-center gap-2 transition-colors ${
@@ -195,7 +195,7 @@ export default function EventModal({
               {Object.entries(priorities).map(
                 ([key, { icon: Icon, label, color }]) => (
                   <button
-                    key={key}
+                    key={`priority-${key}`}
                     type="button"
                     onClick={() => setPriority(key as typeof priority)}
                     className={`flex-1 px-4 py-2 rounded-md flex items-center justify-center gap-2 transition-colors ${

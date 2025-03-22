@@ -58,7 +58,6 @@ export default function ContactList({
       await navigator.clipboard.writeText(text);
       showToast(`${type} copié avec succès !`);
     } catch (err) {
-      console.error("Erreur lors de la copie :", err);
       showToast("Erreur lors de la copie", "error");
     }
   };

@@ -1,32 +1,38 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  onAuthStateChanged,
 } from "firebase/auth";
 import { auth } from "@/config/firebase";
 
 export default function Login() {
   const router = useRouter();
-  const pathname = usePathname();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Purger les champs quand l'utilisateur arrive sur /login
   useEffect(() => {
-    if (pathname === "/login") {
-      setEmail("temp-value");
-      setPassword("temp-value");
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        router.push("/");
+      }
+      setIsLoading(false);
+    });
 
-      setTimeout(() => {
-        setEmail("");
-        setPassword("");
-      }, 50);
-    }
-  }, [pathname]);
+    return () => unsubscribe();
+  }, [router]);
+
+  // Réinitialiser les champs quand le composant est monté
+  useEffect(() => {
+    setEmail("");
+    setPassword("");
+    setError(null);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,9 +40,11 @@ export default function Login() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/app");
+      // La redirection sera gérée par le useEffect
     } catch (err: any) {
       setError("Échec de connexion : " + err.message);
+      // Réinitialiser le mot de passe en cas d'erreur
+      setPassword("");
     }
   };
 
@@ -44,34 +52,58 @@ export default function Login() {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      router.push("/app");
+      // La redirection sera gérée par le useEffect
     } catch (error: any) {
       setError("Erreur avec Google : " + error.message);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-md bg-gray-900 text-white p-8 rounded-lg shadow-lg">
       <h1 className="text-3xl font-bold mb-6 text-center">Connexion</h1>
-      <form onSubmit={handleLogin} className="flex flex-col space-y-4">
-        <input
-          type="email"
-          placeholder="Email"
-          className="bg-gray-800 text-white border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="off"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          className="bg-gray-800 text-white border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="off"
-          required
-        />
+      <form
+        onSubmit={handleLogin}
+        className="flex flex-col space-y-4"
+        autoComplete="new-password"
+        spellCheck="false"
+      >
+        <div className="relative">
+          <input
+            type="email"
+            name="email-no-autofill"
+            placeholder="Email"
+            className="bg-gray-800 text-white border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none w-full"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="new-password"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck="false"
+            required
+          />
+        </div>
+        <div className="relative">
+          <input
+            type="password"
+            name="password-no-autofill"
+            placeholder="Mot de passe"
+            className="bg-gray-800 text-white border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none w-full"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            autoCorrect="off"
+            spellCheck="false"
+            required
+          />
+        </div>
         <button
           type="submit"
           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
