@@ -12,48 +12,38 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Règles spécifiques pour emailSettings
+    // Règles pour emailSettings
     match /emailSettings/{userId} {
       allow read, write: if isAuthenticated() && isOwner(userId);
     }
 
-    // Règles spécifiques pour emails
+    // Règles pour emails
     match /emails/{emailId} {
       allow read, write: if isAuthenticated() && (
-        resource == null || 
-        resource.data.userId == request.auth.uid
+        isOwner(resource.data.userId) || 
+        (request.method == 'create' && isOwner(request.resource.data.userId))
       );
     }
 
-    // Règles pour les autres collections
-    match /{document=**} {
-      allow read, write: if isAuthenticated();
+    // Règles pour events
+    match /events/{eventId} {
+      allow read, write: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        (request.method == 'create' && isOwner(request.resource.data.userId))
+      );
     }
 
-    // Les règles spécifiques seront réactivées après le débogage
-    // match /emailSettings/{userId} {
-    //   allow read, write: if isAuthenticated() && isOwner(userId);
-    // }
+    // Règles pour contacts
+    match /contacts/{contactId} {
+      allow read, write: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        (request.method == 'create' && isOwner(request.resource.data.userId))
+      );
+    }
 
-    // match /emails/{emailId} {
-    //   allow read, write: if isAuthenticated() && (
-    //     isOwner(resource.data.userId) || 
-    //     (request.method == 'create' && isOwner(request.resource.data.userId))
-    //   );
-    // }
-
-    // match /events/{eventId} {
-    //   allow read, write: if isAuthenticated() && (
-    //     isOwner(resource.data.userId) || 
-    //     (request.method == 'create' && isOwner(request.resource.data.userId))
-    //   );
-    // }
-
-    // match /contacts/{contactId} {
-    //   allow read, write: if isAuthenticated() && (
-    //     isOwner(resource.data.userId) || 
-    //     (request.method == 'create' && isOwner(request.resource.data.userId))
-    //   );
-    // }
+    // Règle par défaut - refuser tout accès non autorisé
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 } 

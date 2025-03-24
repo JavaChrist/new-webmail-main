@@ -86,8 +86,31 @@ export default function ContactModal({
     }
   }, [selectedContact]);
 
+  // Effet séparé pour réinitialiser le formulaire quand la modal se ferme
+  useEffect(() => {
+    if (!isOpen) {
+      setContact({
+        nom: "",
+        prenom: "",
+        email: "",
+        telephone: "",
+        entreprise: "",
+        adresse: "",
+        codePostal: "",
+        ville: "",
+        notes: "",
+        categorie: "personal",
+      });
+    }
+  }, [isOpen]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Formulaire soumis avec les données:", contact);
+    if (!contact.nom) {
+      console.log("Le nom est manquant");
+      return;
+    }
     onSave(contact);
   };
 
@@ -117,15 +140,15 @@ export default function ContactModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 p-6 text-left align-middle shadow-xl transition-all">
                 <Dialog.Title
                   as="h3"
-                  className="text-lg font-medium leading-6 text-gray-900 flex justify-between items-center"
+                  className="text-lg font-medium leading-6 text-gray-900 dark:text-white flex justify-between items-center"
                 >
                   {selectedContact ? "Modifier le contact" : "Nouveau contact"}
                   <button
                     onClick={onClose}
-                    className="text-gray-400 hover:text-gray-500"
+                    className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
                   >
                     <X size={20} />
                   </button>
@@ -134,8 +157,8 @@ export default function ContactModal({
                 <form onSubmit={handleSubmit} className="mt-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Nom
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Nom *
                       </label>
                       <input
                         type="text"
@@ -144,58 +167,55 @@ export default function ContactModal({
                         onChange={(e) =>
                           setContact({ ...contact, nom: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Prénom
                       </label>
                       <input
                         type="text"
-                        required
                         value={contact.prenom}
                         onChange={(e) =>
                           setContact({ ...contact, prenom: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Email
                       </label>
                       <input
                         type="email"
-                        required
                         value={contact.email}
                         onChange={(e) =>
                           setContact({ ...contact, email: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Téléphone
                       </label>
                       <input
                         type="tel"
-                        required
                         value={contact.telephone}
                         onChange={(e) =>
                           setContact({ ...contact, telephone: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Entreprise
                     </label>
                     <input
@@ -204,12 +224,12 @@ export default function ContactModal({
                       onChange={(e) =>
                         setContact({ ...contact, entreprise: e.target.value })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Adresse
                     </label>
                     <input
@@ -218,13 +238,13 @@ export default function ContactModal({
                       onChange={(e) =>
                         setContact({ ...contact, adresse: e.target.value })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Code postal
                       </label>
                       <input
@@ -233,11 +253,11 @@ export default function ContactModal({
                         onChange={(e) =>
                           setContact({ ...contact, codePostal: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Ville
                       </label>
                       <input
@@ -246,13 +266,13 @@ export default function ContactModal({
                         onChange={(e) =>
                           setContact({ ...contact, ville: e.target.value })
                         }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Catégorie
                     </label>
                     <select
@@ -264,7 +284,7 @@ export default function ContactModal({
                             .value as keyof typeof contactCategories,
                         })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
                       {Object.entries(contactCategories).map(
                         ([key, { label }]) => (
@@ -277,7 +297,7 @@ export default function ContactModal({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Notes
                     </label>
                     <textarea
@@ -286,11 +306,11 @@ export default function ContactModal({
                         setContact({ ...contact, notes: e.target.value })
                       }
                       rows={3}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
 
-                  <div className="mt-6 flex justify-end gap-3">
+                  <div className="mt-6 flex justify-end space-x-3">
                     {selectedContact && onDelete && (
                       <button
                         type="button"
@@ -303,12 +323,13 @@ export default function ContactModal({
                     <button
                       type="button"
                       onClick={onClose}
-                      className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      className="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
                       Annuler
                     </button>
                     <button
                       type="submit"
+                      onClick={() => console.log("Bouton Créer cliqué")}
                       className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
                       {selectedContact ? "Mettre à jour" : "Créer"}

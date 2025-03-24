@@ -1,8 +1,27 @@
 import { NextResponse } from "next/server";
-import Imap from "imap";
-import { ParsedMail, simpleParser } from "mailparser";
+import imaps from "imap-simple";
+import { ParsedMail, simpleParser, AddressObject } from "mailparser";
 import { adminApp, adminDb, adminAuth } from "@/config/firebase-admin";
 import CryptoJS from "crypto-js";
+
+interface EmailData {
+  messageId: string;
+  from: string;
+  to: string;
+  subject: string;
+  content: string;
+  timestamp: Date;
+  read: boolean;
+  starred: boolean;
+  folder: string;
+  userId: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    size: number;
+    content: string;
+  }>;
+}
 
 const decryptPassword = (encryptedPassword: string) => {
   try {
@@ -13,7 +32,6 @@ const decryptPassword = (encryptedPassword: string) => {
       throw new Error("Clé de chiffrement non définie");
     }
 
-    // Déchiffrement simple
     const bytes = CryptoJS.AES.decrypt(
       encryptedPassword,
       process.env.ENCRYPTION_KEY
@@ -32,15 +50,17 @@ const decryptPassword = (encryptedPassword: string) => {
       "Encrypted password (premiers caractères):",
       encryptedPassword.substring(0, 20)
     );
-    throw new Error(
-      `Erreur lors du décryptage du mot de passe: ${error.message}`
-    );
+    if (error instanceof Error) {
+      throw new Error(
+        `Erreur lors du décryptage du mot de passe: ${error.message}`
+      );
+    }
+    throw new Error("Erreur inconnue lors du décryptage du mot de passe");
   }
 };
 
-// Fonction pour nettoyer les données avant sauvegarde Firestore
-const cleanEmailData = (email: any) => {
-  const cleanData = {
+const cleanEmailData = (email: EmailData): EmailData => {
+  const cleanData: EmailData = {
     messageId: email.messageId || "",
     from: email.from || "",
     to: email.to || "",
@@ -51,21 +71,13 @@ const cleanEmailData = (email: any) => {
     starred: false,
     folder: "inbox",
     userId: email.userId,
-    attachments:
-      email.attachments?.map((att: any) => ({
-        filename: att.filename || "",
-        contentType: att.contentType || "",
-        size: att.size || 0,
-        content: att.content || "",
-      })) || [],
+    attachments: email.attachments?.map((att) => ({
+      filename: att.filename || "",
+      contentType: att.contentType || "",
+      size: att.size || 0,
+      content: att.content || "",
+    })),
   };
-
-  // Supprimer toutes les propriétés undefined ou null
-  Object.keys(cleanData).forEach((key) => {
-    if (cleanData[key] === undefined || cleanData[key] === null) {
-      delete cleanData[key];
-    }
-  });
 
   return cleanData;
 };
@@ -137,126 +149,69 @@ export async function POST(request: Request) {
 
     // Configuration IMAP
     const imapConfig = {
-      user: settings.email,
-      password: password,
-      host: settings.imapHost || "imap.ionos.fr",
-      port: settings.imapPort || 993,
-      tls: settings.imapSecure ?? true,
-      tlsOptions: { rejectUnauthorized: false },
+      imap: {
+        user: settings.email,
+        password: password,
+        host: settings.imapHost || "imap.ionos.fr",
+        port: settings.imapPort || 993,
+        tls: settings.imapSecure ?? true,
+        tlsOptions: { rejectUnauthorized: false },
+      },
     };
 
     console.log("📨 Configuration IMAP:", {
-      user: imapConfig.user,
-      host: imapConfig.host,
-      port: imapConfig.port,
-      tls: imapConfig.tls,
+      user: imapConfig.imap.user,
+      host: imapConfig.imap.host,
+      port: imapConfig.imap.port,
+      tls: imapConfig.imap.tls,
     });
 
     // Fonction pour récupérer les emails
-    const fetchEmails = () => {
-      return new Promise((resolve, reject) => {
-        const imap = new Imap(imapConfig);
-        const emails: any[] = [];
-        let completed = 0;
-        let totalMessages = 0;
+    const fetchEmails = async () => {
+      try {
+        const connection = await imaps.connect(imapConfig);
+        await connection.openBox("INBOX");
 
-        imap.once("ready", () => {
-          imap.openBox("INBOX", false, (err, box) => {
-            if (err) {
-              imap.end();
-              reject(err);
-              return;
-            }
+        const date = new Date();
+        date.setDate(date.getDate() - 30); // Derniers 30 jours
+        const searchCriteria = ["ALL", ["SINCE", date]];
+        const fetchOptions = {
+          bodies: [""],
+          struct: true,
+        };
 
-            const date = new Date();
-            date.setDate(date.getDate() - 30); // Derniers 30 jours
+        const messages = await connection.search(searchCriteria, fetchOptions);
+        const emails = await Promise.all(
+          messages.map(async (message: imaps.Message) => {
+            const parsed = await simpleParser(message.parts[0].body);
+            return {
+              messageId: parsed.messageId || "",
+              from: Array.isArray(parsed.from)
+                ? parsed.from[0]?.text || ""
+                : parsed.from?.text || "",
+              to: Array.isArray(parsed.to)
+                ? parsed.to[0]?.text || ""
+                : parsed.to?.text || "",
+              subject: parsed.subject || "",
+              content: parsed.html || parsed.textAsHtml || parsed.text || "",
+              timestamp: parsed.date || new Date(),
+              userId: userId,
+              read: false,
+              starred: false,
+              folder: "inbox",
+            } as EmailData;
+          })
+        );
 
-            imap.search(["ALL", ["SINCE", date]], (err, results) => {
-              if (err) {
-                imap.end();
-                reject(err);
-                return;
-              }
-
-              if (!results || results.length === 0) {
-                imap.end();
-                resolve([]);
-                return;
-              }
-
-              totalMessages = results.length;
-              const fetch = imap.fetch(results, {
-                bodies: "",
-                struct: true,
-              });
-
-              fetch.on("message", (msg) => {
-                msg.on("body", (stream) => {
-                  simpleParser(stream).then(
-                    (parsed) => {
-                      const email = {
-                        messageId: parsed.messageId,
-                        from: parsed.from?.text,
-                        to: parsed.to?.text,
-                        subject: parsed.subject,
-                        content:
-                          parsed.html || parsed.textAsHtml || parsed.text,
-                        timestamp: parsed.date,
-                        userId: userId,
-                        read: false,
-                        starred: false,
-                        folder: "inbox",
-                      };
-
-                      emails.push(email);
-                      completed++;
-
-                      if (completed === totalMessages) {
-                        imap.end();
-                        resolve(emails);
-                      }
-                    },
-                    (error) => {
-                      console.error("Erreur parsing email:", error);
-                      completed++;
-                      if (completed === totalMessages) {
-                        imap.end();
-                        resolve(emails);
-                      }
-                    }
-                  );
-                });
-              });
-
-              fetch.once("error", (err) => {
-                console.error("Erreur fetch:", err);
-                imap.end();
-                reject(err);
-              });
-
-              fetch.once("end", () => {
-                if (completed === totalMessages) {
-                  imap.end();
-                  resolve(emails);
-                }
-              });
-            });
-          });
-        });
-
-        imap.once("error", (err) => {
-          console.error("Erreur IMAP:", err);
-          reject(err);
-        });
-
-        imap.once("end", () => {
-          if (completed === totalMessages) {
-            resolve(emails);
-          }
-        });
-
-        imap.connect();
-      });
+        await connection.end();
+        return emails;
+      } catch (error) {
+        console.error("Erreur lors de la récupération des emails:", error);
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("Erreur inconnue lors de la récupération des emails");
+      }
     };
 
     // Récupérer les emails

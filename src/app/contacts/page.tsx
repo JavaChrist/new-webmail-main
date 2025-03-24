@@ -8,21 +8,11 @@ import {
   deleteDoc,
   doc,
   addDoc,
-  DocumentData,
   updateDoc,
+  getFirestore,
 } from "firebase/firestore";
-import { db, auth } from "@/config/firebase";
-import {
-  Search,
-  SortAsc,
-  SortDesc,
-  CheckCircle,
-  AlertCircle,
-  Download,
-  LayoutGrid,
-  List,
-  Upload,
-} from "lucide-react";
+import { auth } from "@/config/firebase";
+import { Search, Download, LayoutGrid, List, Upload } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
 
@@ -52,16 +42,10 @@ export default function ContactsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedCategories, setSelectedCategories] = useState<
-    Set<keyof typeof contactCategories>
-  >(
-    new Set(
-      Object.keys(contactCategories) as (keyof typeof contactCategories)[]
-    )
-  );
   const [sortField, setSortField] = useState<SortField>("nom");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const db = getFirestore();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -135,26 +119,45 @@ export default function ContactsPage() {
   };
 
   // Filtrer les contacts selon le terme de recherche
-  const filteredContacts = contacts.filter((contact) => {
-    const searchTermLower = searchTerm.toLowerCase();
-    return (
-      contact.nom.toLowerCase().includes(searchTermLower) ||
-      contact.prenom.toLowerCase().includes(searchTermLower) ||
-      contact.email.toLowerCase().includes(searchTermLower) ||
-      contact.entreprise?.toLowerCase().includes(searchTermLower) ||
-      contact.ville?.toLowerCase().includes(searchTermLower)
-    );
-  });
+  const filteredContacts = contacts
+    .filter((contact) => {
+      const searchTermLower = searchTerm.toLowerCase();
+      return (
+        contact.nom.toLowerCase().includes(searchTermLower) ||
+        contact.prenom.toLowerCase().includes(searchTermLower) ||
+        contact.email.toLowerCase().includes(searchTermLower) ||
+        contact.entreprise?.toLowerCase().includes(searchTermLower) ||
+        contact.ville?.toLowerCase().includes(searchTermLower)
+      );
+    })
+    .sort(sortContacts);
 
   const handleSaveContact = async (contact: Contact) => {
-    if (!auth.currentUser) return;
+    console.log("handleSaveContact appelé avec:", contact);
+
+    if (!auth.currentUser) {
+      console.log("Utilisateur non connecté");
+      showToast("Vous devez être connecté pour créer un contact", "error");
+      return;
+    }
 
     try {
+      console.log("Tentative de sauvegarde du contact:", contact);
+
+      // Validation du champ nom uniquement
+      if (!contact.nom) {
+        console.log("Le nom est manquant");
+        showToast("Le nom est obligatoire", "error");
+        return;
+      }
+
       if (contact.id) {
         // Mise à jour d'un contact existant
+        console.log("Mise à jour du contact existant:", contact.id);
         await updateDoc(doc(db, "contacts", contact.id), {
           ...contact,
           userId: auth.currentUser.uid,
+          updatedAt: new Date(),
         });
         setContacts((prev) =>
           prev.map((c) => (c.id === contact.id ? contact : c))
@@ -162,18 +165,37 @@ export default function ContactsPage() {
         showToast("Contact mis à jour avec succès", "success");
       } else {
         // Création d'un nouveau contact
-        const docRef = await addDoc(collection(db, "contacts"), {
+        console.log("Création d'un nouveau contact");
+        const contactData = {
           ...contact,
           userId: auth.currentUser.uid,
-        });
-        const newContact = { ...contact, id: docRef.id };
-        setContacts((prev) => [...prev, newContact]);
-        showToast("Contact créé avec succès", "success");
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        try {
+          const docRef = await addDoc(collection(db, "contacts"), contactData);
+          console.log("Contact créé avec l'ID:", docRef.id);
+          const newContact = { ...contactData, id: docRef.id };
+          setContacts((prev) => [...prev, newContact]);
+          showToast("Contact créé avec succès", "success");
+        } catch (error) {
+          console.error("Erreur lors de la création du contact:", error);
+          throw error;
+        }
       }
       setIsModalOpen(false);
+      setSelectedContact(undefined);
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde du contact:", error);
-      showToast("Erreur lors de la sauvegarde du contact", "error");
+      console.error(
+        "Erreur détaillée lors de la sauvegarde du contact:",
+        error
+      );
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la sauvegarde du contact",
+        "error"
+      );
     }
   };
 
@@ -188,27 +210,6 @@ export default function ContactsPage() {
     } catch (error) {
       console.error("Erreur lors de la suppression du contact:", error);
       showToast("Erreur lors de la suppression du contact", "error");
-    }
-  };
-
-  const toggleCategory = (category: keyof typeof contactCategories) => {
-    setSelectedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
-      } else {
-        next.add(category);
-      }
-      return next;
-    });
-  };
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
     }
   };
 
@@ -277,6 +278,56 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
             e.preventDefault();
             setViewMode(viewMode === "grid" ? "list" : "grid");
             break;
+          case "c": // Copier les informations du contact sélectionné
+            e.preventDefault();
+            if (selectedContact) {
+              const contactInfo = [
+                `${selectedContact.prenom} ${selectedContact.nom}`,
+                selectedContact.email,
+                selectedContact.telephone,
+                selectedContact.entreprise,
+                [
+                  selectedContact.adresse,
+                  selectedContact.codePostal,
+                  selectedContact.ville,
+                ]
+                  .filter(Boolean)
+                  .join(", "),
+              ]
+                .filter(Boolean)
+                .join("\n");
+              navigator.clipboard.writeText(contactInfo);
+              showToast("Informations du contact copiées", "success");
+            }
+            break;
+          case "m": // Ouvrir Google Maps pour le contact sélectionné
+            e.preventDefault();
+            if (
+              selectedContact?.adresse &&
+              selectedContact?.ville &&
+              selectedContact?.codePostal
+            ) {
+              const query = encodeURIComponent(
+                `${selectedContact.adresse}, ${selectedContact.codePostal} ${selectedContact.ville}`
+              );
+              window.open(
+                `https://www.google.com/maps/search/?api=1&query=${query}`,
+                "_blank"
+              );
+            }
+            break;
+          case "p": // Appeler le contact sélectionné
+            e.preventDefault();
+            if (selectedContact?.telephone) {
+              window.location.href = `tel:${selectedContact.telephone}`;
+            }
+            break;
+          case "i": // Envoyer un email au contact sélectionné
+            e.preventDefault();
+            if (selectedContact?.email) {
+              window.location.href = `mailto:${selectedContact.email}`;
+            }
+            break;
         }
       } else if (e.key === "Escape" && isModalOpen) {
         setIsModalOpen(false);
@@ -286,7 +337,7 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [isModalOpen, viewMode]);
+  }, [isModalOpen, viewMode, selectedContact]);
 
   // Fonction pour importer des contacts
   const importContacts = async (file: File) => {
@@ -396,6 +447,28 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
                 <LayoutGrid size={20} />
               )}
             </button>
+            <button
+              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+              className={`p-2 rounded-lg transition-colors ${
+                isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
+              }`}
+              title={sortOrder === "asc" ? "Tri décroissant" : "Tri croissant"}
+            >
+              {sortOrder === "asc" ? "↑" : "↓"}
+            </button>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as SortField)}
+              className={`p-2 rounded-lg ${
+                isDarkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
+              }`}
+            >
+              <option value="nom">Nom</option>
+              <option value="prenom">Prénom</option>
+              <option value="email">Email</option>
+              <option value="entreprise">Entreprise</option>
+              <option value="ville">Ville</option>
+            </select>
             {/* Bouton d'export */}
             <button
               onClick={exportContacts}
@@ -483,6 +556,22 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
         onDelete={handleDeleteContact}
         selectedContact={selectedContact}
       />
+
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`px-4 py-2 rounded-lg shadow-lg ${
+              toast.type === "success"
+                ? "bg-green-500 text-white"
+                : "bg-red-500 text-white"
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
