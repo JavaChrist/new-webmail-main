@@ -86,56 +86,46 @@ export async function POST(request: Request) {
   console.log("🚀 Début de la requête de synchronisation");
 
   try {
-    // Vérifier le token d'authentification
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.error("❌ Token d'authentification manquant");
-      return NextResponse.json(
-        { error: "Token d'authentification requis" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    let decodedToken;
-    try {
-      decodedToken = await adminAuth.verifyIdToken(token);
-      console.log("✅ Token vérifié pour userId:", decodedToken.uid);
-    } catch (error) {
-      console.error("❌ Erreur de vérification du token:", error);
-      return NextResponse.json(
-        { error: "Token d'authentification invalide" },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
-    const userId = body.userId;
+    console.log("📝 Corps de la requête reçu:", body);
 
-    if (!userId || userId !== decodedToken.uid) {
-      console.error("❌ UserId invalide ou ne correspond pas au token");
-      return NextResponse.json({ error: "UserId invalide" }, { status: 400 });
+    const { userId, accountId } = body;
+    console.log("📝 Paramètres extraits:", { userId, accountId });
+
+    if (!userId || !accountId) {
+      console.error("❌ Paramètres manquants:", { userId, accountId });
+      return NextResponse.json(
+        { error: "Paramètres manquants: userId et accountId sont requis" },
+        { status: 400 }
+      );
     }
 
-    console.log("📧 Récupération des paramètres email pour userId:", userId);
-    const settingsDoc = await adminDb
-      .collection("emailSettings")
-      .doc(userId)
+    // Récupérer les paramètres du compte email spécifique
+    console.log("🔍 Récupération des paramètres du compte email:", accountId);
+    const emailAccountSnap = await adminDb
+      .collection("emailAccounts")
+      .doc(accountId)
       .get();
 
-    if (!settingsDoc.exists) {
-      console.error("❌ Configuration email non trouvée pour userId:", userId);
+    if (!emailAccountSnap.exists) {
+      console.error("❌ Compte email non trouvé:", accountId);
       return NextResponse.json(
-        { error: "Configuration email non trouvée" },
+        { error: "Compte email non trouvé" },
         { status: 404 }
       );
     }
 
-    const settings = settingsDoc.data();
-    if (!settings?.email || !settings?.password) {
+    const emailAccount = emailAccountSnap.data();
+    console.log("✅ Compte email récupéré:", {
+      email: emailAccount?.email,
+      hasPassword: !!emailAccount?.password,
+      hasImap: !!emailAccount?.imapServer,
+    });
+
+    if (!emailAccount?.email || !emailAccount?.password) {
       console.error("❌ Configuration email incomplète:", {
-        hasEmail: !!settings?.email,
-        hasPassword: !!settings?.password,
+        hasEmail: !!emailAccount?.email,
+        hasPassword: !!emailAccount?.password,
       });
       return NextResponse.json(
         { error: "Configuration email incomplète" },
@@ -144,17 +134,17 @@ export async function POST(request: Request) {
     }
 
     console.log("🔐 Tentative de déchiffrement du mot de passe");
-    const password = await decryptPassword(settings.password);
+    const password = await decryptPassword(emailAccount.password);
     console.log("✅ Mot de passe déchiffré avec succès");
 
     // Configuration IMAP
     const imapConfig = {
       imap: {
-        user: settings.email,
+        user: emailAccount.email,
         password: password,
-        host: settings.imapHost || "imap.ionos.fr",
-        port: settings.imapPort || 993,
-        tls: settings.imapSecure ?? true,
+        host: emailAccount.imapServer,
+        port: emailAccount.imapPort,
+        tls: emailAccount.useSSL,
         tlsOptions: { rejectUnauthorized: false },
       },
     };
@@ -246,9 +236,12 @@ export async function POST(request: Request) {
       message: `${newEmails.length} nouveaux emails synchronisés`,
       totalEmails: emails.length,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("❌ Erreur détaillée:", error);
-    console.error("Stack trace:", error.stack);
+    console.error(
+      "Stack trace:",
+      error instanceof Error ? error.stack : "Pas de stack trace"
+    );
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Erreur inconnue",

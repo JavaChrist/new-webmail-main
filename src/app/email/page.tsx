@@ -35,6 +35,17 @@ import { fr } from "date-fns/locale";
 import EmailConfig from "@/components/email/EmailConfig";
 import * as Toast from "@radix-ui/react-toast";
 
+// Fonction pour nettoyer le HTML
+const stripHtml = (html: string) => {
+  if (typeof window === "undefined") return html;
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.textContent || "";
+  } catch (error) {
+    return html.replace(/<[^>]*>/g, "");
+  }
+};
+
 interface Email {
   id: string;
   from: string;
@@ -55,6 +66,12 @@ interface Email {
 
 type Folder = "inbox" | "sent" | "archive" | "trash";
 
+interface EmailAccount {
+  id: string;
+  email: string;
+  name: string;
+}
+
 export default function EmailPage() {
   const { isDarkMode } = useTheme();
   const router = useRouter();
@@ -73,21 +90,50 @@ export default function EmailPage() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<EmailAccount | null>(
+    null
+  );
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (!user) {
         router.push("/login");
-      } else {
-        loadEmails();
-        syncEmails();
-        const syncInterval = setInterval(syncEmails, 5 * 60 * 1000);
-        return () => clearInterval(syncInterval);
+        return;
       }
+      loadEmailAccount();
+      loadEmails();
+      syncEmails();
+      const syncInterval = setInterval(syncEmails, 5 * 60 * 1000);
+      return () => clearInterval(syncInterval);
     });
 
     return () => unsubscribe();
   }, [router, selectedFolder]);
+
+  const loadEmailAccount = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      const emailAccountsRef = collection(db, "emailAccounts");
+      const q = query(
+        emailAccountsRef,
+        where("userId", "==", auth.currentUser.uid)
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        const account = doc.data() as EmailAccount;
+        setSelectedAccount({
+          id: doc.id,
+          email: account.email,
+          name: account.name,
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement du compte email:", error);
+    }
+  };
 
   const loadEmails = async () => {
     if (!auth.currentUser) return;
@@ -315,44 +361,36 @@ export default function EmailPage() {
   // Fonction de synchronisation des emails
   const syncEmails = async () => {
     if (!auth.currentUser) {
-      setToastMessage("Veuillez vous connecter pour synchroniser vos emails");
+      setToastMessage("Vous devez être connecté pour synchroniser");
+      setShowToast(true);
+      return;
+    }
+    if (!selectedAccount) {
+      setToastMessage("Veuillez configurer un compte email pour synchroniser");
       setShowToast(true);
       return;
     }
 
     setIsSyncing(true);
     try {
-      // Obtenir le token d'authentification
-      const token = await auth.currentUser.getIdToken();
-
       const response = await fetch("/api/email/fetch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           userId: auth.currentUser.uid,
+          accountId: selectedAccount.id,
         }),
       });
 
-      // Vérifier si la réponse est de type JSON
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("La réponse du serveur n'est pas au format JSON");
-      }
-
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Erreur lors de la synchronisation");
+        const error = await response.json();
+        throw new Error(error.error || "Erreur lors de la synchronisation");
       }
 
-      // Recharger les emails après la synchronisation
       await loadEmails();
-
-      // Afficher le toast de succès
-      setToastMessage(data.message || "Synchronisation réussie");
+      setToastMessage("Synchronisation réussie");
       setShowToast(true);
     } catch (error) {
       console.error("Erreur détaillée lors de la synchronisation:", error);
@@ -520,7 +558,7 @@ export default function EmailPage() {
                         </div>
                         <div className="truncate">{email.subject}</div>
                         <div className="text-sm text-gray-500 truncate">
-                          {email.content}
+                          {stripHtml(email.content)}
                         </div>
                       </div>
                     </div>

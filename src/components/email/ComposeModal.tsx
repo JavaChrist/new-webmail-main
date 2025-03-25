@@ -154,7 +154,9 @@ export default function ComposeModal({
                 <Editor
                   apiKey="votre-clé-api-tinymce"
                   value={content}
-                  onEditorChange={(newContent) => setContent(newContent)}
+                  onEditorChange={(newContent: string) =>
+                    setContent(newContent)
+                  }
                   init={{
                     height: 400,
                     menubar: false,

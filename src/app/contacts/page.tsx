@@ -9,9 +9,8 @@ import {
   doc,
   addDoc,
   updateDoc,
-  getFirestore,
 } from "firebase/firestore";
-import { auth } from "@/config/firebase";
+import { auth, db } from "@/config/firebase";
 import { Search, Download, LayoutGrid, List, Upload } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
@@ -45,7 +44,6 @@ export default function ContactsPage() {
   const [sortField, setSortField] = useState<SortField>("nom");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const db = getFirestore();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -82,7 +80,7 @@ export default function ContactsPage() {
       const querySnapshot = await getDocs(q);
 
       const loadedContacts = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
+        const data = doc.data() as Contact;
         return {
           id: doc.id,
           userId: data.userId,
@@ -95,7 +93,7 @@ export default function ContactsPage() {
           codePostal: data.codePostal || "",
           ville: data.ville || "",
           notes: data.notes || "",
-          categorie: (data.categorie === "private"
+          categorie: (data.categorie === "personal"
             ? "personal"
             : data.categorie || "other") as ContactCategory,
         };

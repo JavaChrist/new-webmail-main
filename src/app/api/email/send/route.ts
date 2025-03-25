@@ -16,7 +16,7 @@ const decryptPassword = (encryptedPassword: string) => {
 
 export async function POST(request: Request) {
   try {
-    const { to, subject, content, userId, emailId, isHtml, files } =
+    const { to, subject, content, userId, emailId, isHtml, files, accountId } =
       await request.json();
     console.log("1. Données reçues:", {
       to,
@@ -25,44 +25,54 @@ export async function POST(request: Request) {
       emailId,
       isHtml,
       hasFiles: !!files,
+      accountId,
     });
 
     // Vérifier les paramètres requis
-    if (!to || !subject || !content || !userId || !emailId) {
-      console.log("2. Paramètres manquants:", { to, subject, userId, emailId });
+    if (!to || !subject || !content || !userId || !emailId || !accountId) {
+      console.log("2. Paramètres manquants:", {
+        to,
+        subject,
+        userId,
+        emailId,
+        accountId,
+      });
       return NextResponse.json(
         { error: "Paramètres manquants" },
         { status: 400 }
       );
     }
 
-    // Récupérer les paramètres email de l'utilisateur
+    // Récupérer les paramètres du compte email spécifique
     console.log(
-      "3. Tentative de récupération des paramètres email pour userId:",
-      userId
+      "3. Tentative de récupération des paramètres du compte email:",
+      accountId
     );
-    const emailSettingsSnap = await adminDb
-      .collection("emailSettings")
-      .doc(userId)
+    const emailAccountSnap = await adminDb
+      .collection("emailAccounts")
+      .doc(accountId)
       .get();
 
-    if (!emailSettingsSnap.exists) {
-      console.log("4. Configuration email non trouvée pour userId:", userId);
+    if (!emailAccountSnap.exists) {
+      console.log("4. Compte email non trouvé:", accountId);
       return NextResponse.json(
-        { error: "Configuration email non trouvée" },
+        { error: "Compte email non trouvé" },
         { status: 404 }
       );
     }
 
-    const emailSettings = emailSettingsSnap.data();
-    console.log("5. Configuration email récupérée:", {
-      hasPassword: !!emailSettings?.password,
-      hasSmtp: !!emailSettings?.smtp,
-      smtpConfig: emailSettings?.smtp,
+    const emailAccount = emailAccountSnap.data();
+    console.log("5. Compte email récupéré:", {
+      hasPassword: !!emailAccount?.password,
+      hasSmtp: !!emailAccount?.smtpServer,
+      smtpConfig: {
+        server: emailAccount?.smtpServer,
+        port: emailAccount?.smtpPort,
+      },
     });
 
     // Vérifier la structure des données
-    if (!emailSettings?.password) {
+    if (!emailAccount?.password) {
       console.log("6. Mot de passe manquant");
       return NextResponse.json(
         { error: "Mot de passe manquant dans la configuration" },
@@ -70,7 +80,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!emailSettings.smtp) {
+    if (!emailAccount.smtpServer) {
       console.log("7. Configuration SMTP manquante");
       return NextResponse.json(
         { error: "Configuration SMTP manquante" },
@@ -79,16 +89,16 @@ export async function POST(request: Request) {
     }
 
     try {
-      const decryptedPassword = decryptPassword(emailSettings.password);
+      const decryptedPassword = decryptPassword(emailAccount.password);
       console.log("8. Mot de passe décrypté avec succès");
 
       // Créer le transporteur SMTP
       const transportConfig = {
-        host: emailSettings.smtp.host,
-        port: emailSettings.smtp.port,
-        secure: emailSettings.smtp.secure,
+        host: emailAccount.smtpServer,
+        port: emailAccount.smtpPort,
+        secure: emailAccount.useSSL,
         auth: {
-          user: emailSettings.smtp.user,
+          user: emailAccount.email,
           pass: decryptedPassword,
         },
       };
@@ -108,7 +118,7 @@ export async function POST(request: Request) {
 
       // Préparer les options d'email
       const mailOptions = {
-        from: emailSettings.smtp.user,
+        from: emailAccount.email,
         to,
         subject,
         text: !isHtml ? content : undefined,

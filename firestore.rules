@@ -12,6 +12,14 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    // Règles pour emailAccounts
+    match /emailAccounts/{accountId} {
+      allow read, write: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        (request.method == 'create' && isOwner(request.resource.data.userId))
+      );
+    }
+
     // Règles pour emailSettings
     match /emailSettings/{userId} {
       allow read, write: if isAuthenticated() && isOwner(userId);

@@ -1,11 +1,19 @@
 "use client";
 
-import { Dialog } from "@headlessui/react";
+import { Dialog as HeadlessDialog } from "@headlessui/react";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
-import { X, Save, RefreshCw } from "lucide-react";
-import { doc, setDoc, getDoc } from "firebase/firestore";
-import { db, auth } from "@/config/firebase";
+import { X, Eye, EyeOff } from "lucide-react";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+import { auth, db } from "@/config/firebase";
 import CryptoJS from "crypto-js";
 
 interface EmailConfigProps {
@@ -15,7 +23,7 @@ interface EmailConfigProps {
 
 interface EmailSettings {
   email: string;
-  password: string;
+  emailPassword: string;
   // Paramètres SMTP (envoi)
   smtpHost: string;
   smtpPort: number;
@@ -72,9 +80,10 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
   const { isDarkMode } = useTheme();
   const [settings, setSettings] = useState<EmailSettings>({
     email: "",
-    password: "",
+    emailPassword: "",
     ...defaultIonosSettings,
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,30 +94,24 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
       if (!auth.currentUser) return;
 
       try {
-        const settingsDoc = await getDoc(
-          doc(db, "emailSettings", auth.currentUser.uid)
+        const emailAccountsRef = collection(db, "emailAccounts");
+        const q = query(
+          emailAccountsRef,
+          where("userId", "==", auth.currentUser.uid)
         );
-        if (settingsDoc.exists()) {
-          const data = settingsDoc.data();
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const data = querySnapshot.docs[0].data();
           setSettings({
-            email: data.email,
-            password: decryptPassword(data.password),
-            smtpHost:
-              data.smtp?.host || data.smtpHost || defaultIonosSettings.smtpHost,
-            smtpPort:
-              data.smtp?.port || data.smtpPort || defaultIonosSettings.smtpPort,
-            smtpSecure:
-              data.smtp?.secure ??
-              data.smtpSecure ??
-              defaultIonosSettings.smtpSecure,
-            imapHost:
-              data.imap?.host || data.imapHost || defaultIonosSettings.imapHost,
-            imapPort:
-              data.imap?.port || data.imapPort || defaultIonosSettings.imapPort,
-            imapSecure:
-              data.imap?.secure ??
-              data.imapSecure ??
-              defaultIonosSettings.imapSecure,
+            email: data.email || "",
+            emailPassword: data.password ? decryptPassword(data.password) : "",
+            smtpHost: data.smtpServer || defaultIonosSettings.smtpHost,
+            smtpPort: data.smtpPort || defaultIonosSettings.smtpPort,
+            smtpSecure: data.useSSL ?? defaultIonosSettings.smtpSecure,
+            imapHost: data.imapServer || defaultIonosSettings.imapHost,
+            imapPort: data.imapPort || defaultIonosSettings.imapPort,
+            imapSecure: data.useSSL ?? defaultIonosSettings.imapSecure,
           });
         }
       } catch (error) {
@@ -141,7 +144,7 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
           port: settings.smtpPort,
           secure: settings.smtpSecure,
           user: settings.email,
-          pass: settings.password,
+          pass: settings.emailPassword,
         }),
       });
 
@@ -178,41 +181,34 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
     setSuccess(null);
 
     try {
-      // Utiliser l'ID de l'utilisateur comme ID du document
-      const userId = auth.currentUser.uid;
+      const emailAccountsRef = collection(db, "emailAccounts");
+      const q = query(
+        emailAccountsRef,
+        where("userId", "==", auth.currentUser.uid)
+      );
+      const querySnapshot = await getDocs(q);
 
-      // Préparer les données à sauvegarder
       const configData = {
         email: settings.email,
-        password: encryptPassword(settings.password),
-        smtp: {
-          host: settings.smtpHost,
-          port: Number(settings.smtpPort),
-          secure: Boolean(settings.smtpSecure),
-          user: settings.email,
-        },
-        imap: {
-          host: settings.imapHost,
-          port: Number(settings.imapPort),
-          secure: Boolean(settings.imapSecure),
-          user: settings.email,
-        },
+        password: encryptPassword(settings.emailPassword),
+        smtpServer: settings.smtpHost,
+        smtpPort: Number(settings.smtpPort),
+        useSSL: Boolean(settings.smtpSecure),
+        imapServer: settings.imapHost,
+        imapPort: Number(settings.imapPort),
+        userId: auth.currentUser.uid,
+        name: settings.email,
         updatedAt: new Date().toISOString(),
       };
 
-      console.log("Configuration à sauvegarder:", {
-        email: configData.email,
-        hasPassword: !!configData.password,
-        smtp: {
-          host: configData.smtp.host,
-          port: configData.smtp.port,
-          secure: configData.smtp.secure,
-          user: configData.smtp.user,
-        },
-      });
-
-      // Sauvegarder dans Firestore
-      await setDoc(doc(db, "emailSettings", userId), configData);
+      if (!querySnapshot.empty) {
+        // Mettre à jour le compte existant
+        const docRef = doc(db, "emailAccounts", querySnapshot.docs[0].id);
+        await updateDoc(docRef, configData);
+      } else {
+        // Créer un nouveau compte
+        await addDoc(emailAccountsRef, configData);
+      }
 
       setSuccess("Configuration enregistrée avec succès");
       setTimeout(() => onClose(), 1500);
@@ -238,19 +234,19 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
   };
 
   return (
-    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
+    <HeadlessDialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel
+        <HeadlessDialog.Panel
           className={`w-full max-w-2xl p-6 rounded-lg shadow-xl ${
             isDarkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <Dialog.Title className="text-xl font-bold">
+            <HeadlessDialog.Title className="text-xl font-bold">
               Configuration du compte email
-            </Dialog.Title>
+            </HeadlessDialog.Title>
             <button
               onClick={onClose}
               className={`p-1 rounded-lg transition-colors ${
@@ -294,20 +290,36 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
                   />
                 </div>
                 <div>
-                  <label className="block mb-1">Mot de passe</label>
-                  <input
-                    type="password"
-                    value={settings.password}
-                    onChange={(e) =>
-                      setSettings({ ...settings, password: e.target.value })
-                    }
-                    className={`w-full px-4 py-2 rounded-lg ${
-                      isDarkMode
-                        ? "bg-gray-700 text-white placeholder-gray-400"
-                        : "bg-gray-50 text-gray-900 placeholder-gray-500"
-                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                    required
-                  />
+                  <label className="block mb-1">
+                    Mot de passe du compte email
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={settings.emailPassword}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailPassword: e.target.value,
+                        })
+                      }
+                      className={`w-full px-4 py-2 rounded-lg ${
+                        isDarkMode
+                          ? "bg-gray-700 text-white placeholder-gray-400"
+                          : "bg-gray-50 text-gray-900 placeholder-gray-500"
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                        isDarkMode ? "hover:bg-gray-600" : "hover:bg-gray-200"
+                      }`}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -349,22 +361,6 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
                     }`}
                     required
                   />
-                </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={settings.smtpSecure}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          smtpSecure: e.target.checked,
-                        })
-                      }
-                      className="rounded"
-                    />
-                    <span>Utiliser SSL/TLS</span>
-                  </label>
                 </div>
               </div>
             </div>
@@ -409,70 +405,89 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
                     required
                   />
                 </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={settings.imapSecure}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          imapSecure: e.target.checked,
-                        })
-                      }
-                      className="rounded"
-                    />
-                    <span>Utiliser SSL/TLS</span>
-                  </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Sécurité</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block mb-1">SMTP</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.smtpSecure}
+                    onChange={(e) =>
+                      setSettings({ ...settings, smtpSecure: e.target.checked })
+                    }
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      isDarkMode
+                        ? "bg-gray-700 text-white"
+                        : "bg-gray-50 text-gray-900"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">IMAP</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.imapSecure}
+                    onChange={(e) =>
+                      setSettings({ ...settings, imapSecure: e.target.checked })
+                    }
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      isDarkMode
+                        ? "bg-gray-700 text-white"
+                        : "bg-gray-50 text-gray-900"
+                    }`}
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-between gap-4 mt-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Test de connexion</h3>
               <button
                 type="button"
-                onClick={resetToIonosDefaults}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                onClick={testConnection}
+                className={`w-full px-4 py-2 rounded-lg ${
                   isDarkMode
-                    ? "bg-gray-700 hover:bg-gray-600"
-                    : "bg-gray-200 hover:bg-gray-300"
+                    ? "bg-gray-700 text-white"
+                    : "bg-gray-50 text-gray-900"
                 }`}
               >
-                <RefreshCw size={18} />
-                Paramètres Ionos par défaut
+                {isTesting ? "Test en cours..." : "Tester la connexion"}
               </button>
+            </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={testConnection}
-                  disabled={isTesting}
-                  className={`px-4 py-2 rounded-lg ${
-                    isDarkMode
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-blue-500 hover:bg-blue-600"
-                  } text-white`}
-                >
-                  {isTesting ? "Test en cours..." : "Tester la connexion"}
-                </button>
-
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Actions</h3>
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   type="submit"
-                  disabled={isSaving}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                  className={`w-full px-4 py-2 rounded-lg ${
                     isDarkMode
-                      ? "bg-green-600 hover:bg-green-700"
-                      : "bg-green-500 hover:bg-green-600"
-                  } text-white`}
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-50 text-gray-900"
+                  }`}
                 >
-                  <Save size={18} />
-                  {isSaving ? "Enregistrement..." : "Enregistrer"}
+                  {isSaving ? "Sauvegarder..." : "Sauvegarder"}
+                </button>
+                <button
+                  type="reset"
+                  onClick={resetToIonosDefaults}
+                  className={`w-full px-4 py-2 rounded-lg ${
+                    isDarkMode
+                      ? "bg-gray-700 text-white"
+                      : "bg-gray-50 text-gray-900"
+                  }`}
+                >
+                  Réinitialiser à la configuration par défaut
                 </button>
               </div>
             </div>
           </form>
-        </Dialog.Panel>
+        </HeadlessDialog.Panel>
       </div>
-    </Dialog>
+    </HeadlessDialog>
   );
 }
