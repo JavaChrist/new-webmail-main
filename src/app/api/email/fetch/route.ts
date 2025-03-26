@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import imaps from "imap-simple";
-import { ParsedMail, simpleParser, AddressObject } from "mailparser";
+import { simpleParser, AddressObject } from "mailparser";
 import { adminApp, adminDb, adminAuth } from "@/config/firebase-admin";
 import CryptoJS from "crypto-js";
 
