@@ -1,57 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminApp } from "@/config/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+
+// Initialisation de Firebase Admin
+const initializeFirebaseAdmin = () => {
+  if (!getApps().length) {
+    return initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY,
+      }),
+    });
+  }
+  return getApps()[0];
+};
 
 export async function middleware(req: NextRequest) {
-  // Vérifier d'abord le header Bearer pour les requêtes API
-  const authHeader = req.headers.get("authorization");
-  let token = null;
-
-  if (authHeader?.startsWith("Bearer ")) {
-    token = authHeader.split("Bearer ")[1];
-  } else {
-    // Sinon, vérifier le cookie pour les pages web
-    token = req.cookies.get("token")?.value || null;
-  }
-
-  if (!token) {
-    // Si c'est une requête API, renvoyer une erreur 401
-    if (req.nextUrl.pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        { error: "Token d'authentification requis" },
-        { status: 401 }
-      );
-    }
-    // Sinon, rediriger vers la page de connexion
-    if (req.nextUrl.pathname !== "/login") {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
-    return NextResponse.next();
-  }
+  // Vérifier si la route doit être protégée
+  const app = initializeFirebaseAdmin();
+  const auth = getAuth(app);
 
   try {
-    await getAuth().verifyIdToken(token);
-
-    // Si l'utilisateur est déjà connecté et qu'il va sur `/login`, on le redirige vers `/emails`
-    if (req.nextUrl.pathname === "/login") {
-      return NextResponse.redirect(new URL("/emails", req.url));
-    }
-
-    return NextResponse.next();
-  } catch (error) {
-    // Si c'est une requête API, renvoyer une erreur 401
-    if (req.nextUrl.pathname.startsWith("/api/")) {
+    // Récupérer le token depuis le header Authorization
+    const token = req.headers.get("Authorization")?.split("Bearer ")[1];
+    if (!token) {
       return NextResponse.json(
-        { error: "Token d'authentification invalide" },
+        { error: "Authentification requise" },
         { status: 401 }
       );
     }
-    // Sinon, rediriger vers la page de connexion
-    return NextResponse.redirect(new URL("/login", req.url));
+
+    // Vérifier le token
+    const decodedToken = await auth.verifyIdToken(token);
+
+    // Ajouter l'ID de l'utilisateur aux headers pour utilisation ultérieure
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("X-User-ID", decodedToken.uid);
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  } catch (error) {
+    return NextResponse.json({ error: "Token invalide" }, { status: 401 });
   }
 }
 
-// Protéger toutes les routes nécessaires
+// Configuration des routes à protéger
 export const config = {
-  matcher: ["/", "/emails", "/contacts", "/calendar", "/api/email/:path*"],
+  matcher: [
+    "/api/emailAccounts/:path*",
+    "/api/emailSettings/:path*",
+    "/api/emails/:path*",
+    "/api/events/:path*",
+    "/api/contacts/:path*",
+  ],
 };
