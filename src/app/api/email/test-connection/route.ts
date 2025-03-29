@@ -5,7 +5,7 @@ export const runtime = "nodejs"; // Forcer l'utilisation de Node.js au lieu de E
 
 export async function POST(request: Request) {
   try {
-    const { type, host, port, secure, user, pass } = await request.json();
+    const { host, port, secure, user, pass } = await request.json();
 
     // Configuration pour SMTP
     const config = {
