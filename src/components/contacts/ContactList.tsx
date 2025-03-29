@@ -1,14 +1,5 @@
 "use client";
-import {
-  Mail,
-  Phone,
-  Building2,
-  Edit,
-  MapPin,
-  Copy,
-  ExternalLink,
-  CheckCircle,
-} from "lucide-react";
+import { Mail, Phone, Building2, MapPin, Copy } from "lucide-react";
 import { Contact, contactCategories, ContactCategory } from "./ContactModal";
 import { useState } from "react";
 
@@ -64,16 +55,8 @@ export default function ContactList({
     window.open(url, "_blank");
   };
 
-  const openEmailClient = (email: string) => {
-    window.location.href = `mailto:${email}`;
-  };
-
   const openPhoneDialer = (phone: string) => {
     window.location.href = `tel:${phone}`;
-  };
-
-  const getContactInitials = (contact: Contact) => {
-    return `${contact.prenom[0]}${contact.nom[0]}`.toUpperCase();
   };
 
   if (contacts.length === 0) {
@@ -128,7 +111,11 @@ export default function ContactList({
                         contact.email
                       )}`;
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Envoyer un email"
                   >
                     <Mail size={18} className="text-gray-500" />
@@ -139,7 +126,11 @@ export default function ContactList({
                       e.stopPropagation();
                       copyToClipboard(contact.email);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Copier l'email"
                   >
                     <Copy size={16} />
@@ -153,7 +144,11 @@ export default function ContactList({
                       e.stopPropagation();
                       openPhoneDialer(contact.telephone);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Appeler"
                   >
                     <Phone size={18} className="text-gray-500" />
@@ -164,7 +159,11 @@ export default function ContactList({
                       e.stopPropagation();
                       copyToClipboard(contact.telephone);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Copier le numéro"
                   >
                     <Copy size={16} />
@@ -210,7 +209,11 @@ export default function ContactList({
                       e.stopPropagation();
                       copyToClipboard(contact.email);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Copier l'email"
                   >
                     <Copy size={16} />
@@ -222,10 +225,14 @@ export default function ContactList({
                         contact.email
                       )}`;
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Envoyer un email"
                   >
-                    <Mail size={16} />
+                    <Mail size={18} className="text-gray-500" />
                   </button>
                 </>
               )}
@@ -236,7 +243,11 @@ export default function ContactList({
                       e.stopPropagation();
                       copyToClipboard(contact.telephone);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Copier le numéro"
                   >
                     <Copy size={16} />
@@ -246,10 +257,14 @@ export default function ContactList({
                       e.stopPropagation();
                       openPhoneDialer(contact.telephone);
                     }}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? "hover:bg-blue-900/30 hover:text-blue-400"
+                        : "hover:bg-blue-50 hover:text-blue-600"
+                    }`}
                     title="Appeler"
                   >
-                    <Phone size={16} />
+                    <Phone size={18} className="text-gray-500" />
                   </button>
                 </>
               )}
@@ -300,6 +315,21 @@ export default function ContactList({
           </div>
         </div>
       ))}
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`px-4 py-2 rounded-lg shadow-lg ${
+              toast.type === "success"
+                ? "bg-green-500 text-white"
+                : "bg-red-500 text-white"
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

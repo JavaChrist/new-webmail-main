@@ -27,7 +27,6 @@ export default function AppPage() {
       console.log("Chargement des emails non lus pour:", userId);
       const emailsRef = collection(db, "emails");
 
-      // Requête simplifiée en attendant l'index
       const q = query(
         emailsRef,
         where("userId", "==", userId),
@@ -42,14 +41,13 @@ export default function AppPage() {
         ...doc.data(),
       })) as Email[];
 
-      // Trier manuellement par timestamp
       emails.sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
-
-      // Limiter à 5 emails
-      const limitedEmails = emails.slice(0, 5);
+      const limitedEmails = emails.slice(0, 15);
 
       console.log("Emails chargés:", limitedEmails);
+      console.log("État unreadEmails avant mise à jour:", unreadEmails);
       setUnreadEmails(limitedEmails);
+      console.log("État unreadEmails après mise à jour:", limitedEmails);
     } catch (error) {
       console.error("Erreur lors du chargement des emails:", error);
       setUnreadEmails([]);
@@ -57,18 +55,38 @@ export default function AppPage() {
   };
 
   useEffect(() => {
+    console.log("Démarrage de l'effet useEffect");
     const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
+      console.log(
+        "État d'authentification changé:",
+        user ? "Connecté" : "Non connecté"
+      );
       if (user) {
         setUserEmail(user.email);
         await loadUnreadEmails(user.uid);
+        // Ajouter un intervalle de rafraîchissement
+        const refreshInterval = setInterval(() => {
+          loadUnreadEmails(user.uid);
+        }, 30000); // Rafraîchir toutes les 30 secondes
+        setIsLoading(false);
+        return () => clearInterval(refreshInterval);
       } else {
+        setIsLoading(false);
         router.push("/login");
+        return () => {};
       }
-      setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log("Nettoyage de l'effet useEffect");
+      unsubscribe();
+    };
   }, [router]);
+
+  // Ajouter un effet pour surveiller l'état de chargement
+  useEffect(() => {
+    console.log("État de chargement changé:", isLoading);
+  }, [isLoading]);
 
   if (isLoading) {
     return (
@@ -139,7 +157,7 @@ export default function AppPage() {
                       ? "border-gray-800 hover:bg-gray-800"
                       : "border-gray-200 hover:bg-gray-100"
                   } p-4 transition-colors cursor-pointer`}
-                  onClick={() => router.push(`/app/emails/${email.id}`)}
+                  onClick={() => router.push(`/email?emailId=${email.id}`)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">

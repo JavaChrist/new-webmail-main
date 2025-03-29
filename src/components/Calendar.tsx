@@ -19,6 +19,7 @@ import {
 import { db, auth } from "@/config/firebase";
 import "../styles/calendar.css";
 import EventModal from "./EventModal";
+import { useTheme } from "@/context/ThemeContext";
 
 // Types pour les événements avec priorité
 interface CalendarEvent {
@@ -129,6 +130,7 @@ const formats = {
 };
 
 export default function MyCalendar() {
+  const { isDarkMode } = useTheme();
   const [view, setView] = useState<View>(Views.WEEK);
   const [date, setDate] = useState(new Date());
   const [selectedCategories, setSelectedCategories] = useState<
@@ -342,7 +344,11 @@ export default function MyCalendar() {
   };
 
   return (
-    <div className="p-4 bg-gray-900 text-white rounded-lg shadow-lg min-h-screen">
+    <div
+      className={`p-4 ${isDarkMode ? "bg-gray-900" : "bg-white"} text-${
+        isDarkMode ? "white" : "black"
+      } rounded-lg shadow-lg min-h-screen`}
+    >
       <style jsx global>{`
         .event-item {
           position: relative;
@@ -362,6 +368,136 @@ export default function MyCalendar() {
         .rbc-calendar {
           overflow: hidden;
         }
+        /* Styles pour le thème clair */
+        ${!isDarkMode
+          ? `
+          .rbc-calendar {
+            background-color: white;
+            color: #1f2937;
+          }
+          .rbc-header {
+            background-color: #f3f4f6;
+            color: #1f2937;
+          }
+          .rbc-time-view {
+            background-color: white;
+          }
+          .rbc-time-content {
+            background-color: white;
+          }
+          .rbc-time-slot {
+            color: #1f2937;
+          }
+          .rbc-time-gutter {
+            background-color: #f3f4f6;
+            color: #1f2937;
+          }
+          .rbc-today {
+            background-color: #f3f4f6;
+          }
+          .rbc-off-range {
+            background-color: #f9fafb;
+            color: #9ca3af;
+          }
+          .rbc-off-range-bg {
+            background-color: #f9fafb;
+          }
+          .rbc-toolbar button {
+            background-color: white;
+            color: #1f2937;
+            border-color: #e5e7eb;
+          }
+          .rbc-toolbar button:hover {
+            background-color: #f3f4f6;
+          }
+          .rbc-toolbar button.rbc-active {
+            background-color: #3b82f6;
+            color: white;
+          }
+          .rbc-toolbar-label {
+            color: #1f2937;
+          }
+          .rbc-agenda-view table.rbc-agenda-table {
+            background-color: white;
+            color: #1f2937;
+          }
+          .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+            background-color: #f3f4f6;
+            color: #1f2937;
+          }
+          .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+            color: #1f2937;
+          }
+          .rbc-agenda-view table.rbc-agenda-table tbody > tr:hover {
+            background-color: #f3f4f6;
+          }
+        `
+          : ""}
+        /* Styles pour le thème sombre */
+        ${isDarkMode
+          ? `
+          .rbc-calendar {
+            background-color: #1f2937;
+            color: white;
+          }
+          .rbc-header {
+            background-color: #111827;
+            color: white;
+          }
+          .rbc-time-view {
+            background-color: #1f2937;
+          }
+          .rbc-time-content {
+            background-color: #1f2937;
+          }
+          .rbc-time-slot {
+            color: white;
+          }
+          .rbc-time-gutter {
+            background-color: #111827;
+            color: white;
+          }
+          .rbc-today {
+            background-color: #374151;
+          }
+          .rbc-off-range {
+            background-color: #111827;
+            color: #6b7280;
+          }
+          .rbc-off-range-bg {
+            background-color: #111827;
+          }
+          .rbc-toolbar button {
+            background-color: #374151;
+            color: white;
+            border-color: #4b5563;
+          }
+          .rbc-toolbar button:hover {
+            background-color: #4b5563;
+          }
+          .rbc-toolbar button.rbc-active {
+            background-color: #3b82f6;
+            color: white;
+          }
+          .rbc-toolbar-label {
+            color: white;
+          }
+          .rbc-agenda-view table.rbc-agenda-table {
+            background-color: #1f2937;
+            color: white;
+          }
+          .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+            background-color: #111827;
+            color: white;
+          }
+          .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+            color: white;
+          }
+          .rbc-agenda-view table.rbc-agenda-table tbody > tr:hover {
+            background-color: #374151;
+          }
+        `
+          : ""}
       `}</style>
       <h2 className="text-xl font-bold mb-4 text-center">
         {format(date, "EEEE d MMMM yyyy", { locale: fr })}

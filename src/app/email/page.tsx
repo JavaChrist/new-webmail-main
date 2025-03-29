@@ -13,6 +13,9 @@ import {
   RefreshCw,
   Settings,
   X,
+  Folder,
+  MoreVertical,
+  ChevronDown,
 } from "lucide-react";
 import {
   collection,
@@ -27,7 +30,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db, auth } from "@/config/firebase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ComposeModal from "@/components/email/ComposeModal";
 import EmailView from "@/components/email/EmailView";
 import { format } from "date-fns";
@@ -44,7 +47,7 @@ interface Email {
   timestamp: Date;
   read: boolean;
   starred: boolean;
-  folder: "inbox" | "sent" | "archive" | "trash";
+  folder: "inbox" | "sent" | "archive" | "trash" | string;
   userId: string;
   attachments?: {
     name: string;
@@ -53,7 +56,14 @@ interface Email {
   }[];
 }
 
-type Folder = "inbox" | "sent" | "archive" | "trash";
+type Folder = "inbox" | "sent" | "archive" | "trash" | string;
+
+interface CustomFolder {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: Date;
+}
 
 interface EmailAccount {
   id: string;
@@ -64,6 +74,7 @@ interface EmailAccount {
 export default function EmailPage() {
   const { isDarkMode } = useTheme();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<Folder>("inbox");
   const [searchTerm, setSearchTerm] = useState("");
@@ -83,6 +94,10 @@ export default function EmailPage() {
     null
   );
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const [customFolders, setCustomFolders] = useState<CustomFolder[]>([]);
+  const [isFoldersOpen, setIsFoldersOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -92,6 +107,7 @@ export default function EmailPage() {
       }
       loadEmailAccount();
       loadEmails();
+      loadCustomFolders();
       syncEmails();
       const syncInterval = setInterval(syncEmails, 5 * 60 * 1000);
       return () => clearInterval(syncInterval);
@@ -99,6 +115,16 @@ export default function EmailPage() {
 
     return () => unsubscribe();
   }, [router, selectedFolder]);
+
+  useEffect(() => {
+    const emailId = searchParams.get("emailId");
+    if (emailId) {
+      const email = emails.find((e) => e.id === emailId);
+      if (email) {
+        handleEmailClick(email);
+      }
+    }
+  }, [searchParams, emails]);
 
   const loadEmailAccount = async () => {
     if (!auth.currentUser) return;
@@ -332,23 +358,59 @@ export default function EmailPage() {
     setIsComposeOpen(true);
   };
 
-  const folders = [
-    { id: "inbox", label: "Boîte de réception", icon: Inbox },
-    { id: "sent", label: "Envoyés", icon: Send },
-    { id: "archive", label: "Archive", icon: Archive },
-    { id: "trash", label: "Corbeille", icon: Trash2 },
-  ];
+  const handleCreateFolder = async () => {
+    if (!auth.currentUser || !newFolderName.trim()) return;
 
-  const filteredEmails = emails.filter(
-    (email) =>
-      email.folder === selectedFolder &&
-      (searchTerm === "" ||
-        email.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        email.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        email.content.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+    try {
+      const folderRef = await addDoc(collection(db, "customFolders"), {
+        name: newFolderName.trim(),
+        userId: auth.currentUser.uid,
+        createdAt: Timestamp.now(),
+      });
 
-  // Fonction de synchronisation des emails
+      const newFolder: CustomFolder = {
+        id: folderRef.id,
+        name: newFolderName.trim(),
+        userId: auth.currentUser.uid,
+        createdAt: new Date(),
+      };
+
+      setCustomFolders([...customFolders, newFolder]);
+      setNewFolderName("");
+      setIsCreateFolderOpen(false);
+      setToastMessage("Dossier créé avec succès");
+      setShowToast(true);
+    } catch (error) {
+      console.error("Erreur lors de la création du dossier:", error);
+      setToastMessage("Erreur lors de la création du dossier");
+      setShowToast(true);
+    }
+  };
+
+  const loadCustomFolders = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      const foldersRef = collection(db, "customFolders");
+      const q = query(
+        foldersRef,
+        where("userId", "==", auth.currentUser.uid),
+        orderBy("createdAt", "desc")
+      );
+
+      const querySnapshot = await getDocs(q);
+      const folders = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+      })) as CustomFolder[];
+
+      setCustomFolders(folders);
+    } catch (error) {
+      console.error("Erreur lors du chargement des dossiers:", error);
+    }
+  };
+
   const syncEmails = async () => {
     if (!auth.currentUser) {
       setToastMessage("Vous devez être connecté pour synchroniser");
@@ -412,10 +474,10 @@ export default function EmailPage() {
   };
 
   const handleSelectAll = () => {
-    if (selectedEmails.size === filteredEmails.length) {
+    if (selectedEmails.size === emails.length) {
       setSelectedEmails(new Set());
     } else {
-      setSelectedEmails(new Set(filteredEmails.map((email) => email.id)));
+      setSelectedEmails(new Set(emails.map((email) => email.id)));
     }
   };
 
@@ -438,6 +500,44 @@ export default function EmailPage() {
     } catch (error) {
       console.error("Erreur lors du déplacement des emails:", error);
       setToastMessage("Erreur lors du déplacement des emails");
+      setShowToast(true);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, emailId: string) => {
+    e.dataTransfer.setData("emailId", emailId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.add("bg-blue-100");
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.currentTarget.classList.remove("bg-blue-100");
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolder: string) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove("bg-blue-100");
+
+    const emailId = e.dataTransfer.getData("emailId");
+    if (!emailId) return;
+
+    try {
+      const emailRef = doc(db, "emails", emailId);
+      await updateDoc(emailRef, {
+        folder: targetFolder,
+      });
+
+      // Mettre à jour l'état local
+      setEmails(emails.filter((email) => email.id !== emailId));
+      setSelectedEmail(null);
+      setToastMessage(`Email déplacé vers ${targetFolder}`);
+      setShowToast(true);
+    } catch (error) {
+      console.error("Erreur lors du déplacement de l'email:", error);
+      setToastMessage("Erreur lors du déplacement de l'email");
       setShowToast(true);
     }
   };
@@ -477,22 +577,126 @@ export default function EmailPage() {
         </div>
 
         <nav className="mt-4">
-          {folders.map((folder) => (
+          <button
+            onClick={() => setSelectedFolder("inbox")}
+            className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
+              selectedFolder === "inbox"
+                ? "bg-blue-600 text-white"
+                : isDarkMode
+                ? "hover:bg-gray-800"
+                : "hover:bg-gray-200"
+            }`}
+          >
+            <Inbox size={20} />
+            <span>Boîte de réception</span>
+          </button>
+
+          {/* Bouton Dossiers avec menu accordéon */}
+          <div className="relative">
             <button
-              key={folder.id}
-              onClick={() => setSelectedFolder(folder.id as Folder)}
-              className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
-                selectedFolder === folder.id
+              onClick={() => setIsFoldersOpen(!isFoldersOpen)}
+              className={`w-full flex items-center justify-between p-2 rounded-lg mb-1 transition-colors ${
+                selectedFolder.startsWith("folder_")
                   ? "bg-blue-600 text-white"
                   : isDarkMode
                   ? "hover:bg-gray-800"
                   : "hover:bg-gray-200"
               }`}
             >
-              <folder.icon size={20} />
-              <span>{folder.label}</span>
+              <div className="flex items-center gap-2">
+                <Folder size={20} />
+                <span>Dossiers</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCreateFolderOpen(true);
+                  }}
+                  className="p-1 hover:bg-gray-700 rounded-full cursor-pointer"
+                >
+                  <MoreVertical size={16} />
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform ${
+                    isFoldersOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
             </button>
-          ))}
+
+            {/* Menu accordéon des dossiers personnalisés */}
+            {isFoldersOpen && (
+              <div className="ml-4 space-y-1">
+                {customFolders.map((folder) => (
+                  <div
+                    key={folder.id}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, `folder_${folder.id}`)}
+                    className="relative"
+                  >
+                    <button
+                      onClick={() => setSelectedFolder(`folder_${folder.id}`)}
+                      className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                        selectedFolder === `folder_${folder.id}`
+                          ? "bg-blue-600 text-white"
+                          : isDarkMode
+                          ? "hover:bg-gray-800"
+                          : "hover:bg-gray-200"
+                      }`}
+                    >
+                      <Folder size={16} />
+                      <span>{folder.name}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setSelectedFolder("sent")}
+            className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
+              selectedFolder === "sent"
+                ? "bg-blue-600 text-white"
+                : isDarkMode
+                ? "hover:bg-gray-800"
+                : "hover:bg-gray-200"
+            }`}
+          >
+            <Send size={20} />
+            <span>Envoyés</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedFolder("archive")}
+            className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
+              selectedFolder === "archive"
+                ? "bg-blue-600 text-white"
+                : isDarkMode
+                ? "hover:bg-gray-800"
+                : "hover:bg-gray-200"
+            }`}
+          >
+            <Archive size={20} />
+            <span>Archive</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedFolder("trash")}
+            className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 transition-colors ${
+              selectedFolder === "trash"
+                ? "bg-blue-600 text-white"
+                : isDarkMode
+                ? "hover:bg-gray-800"
+                : "hover:bg-gray-200"
+            }`}
+          >
+            <Trash2 size={20} />
+            <span>Corbeille</span>
+          </button>
         </nav>
       </div>
 
@@ -553,7 +757,7 @@ export default function EmailPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={selectedEmails.size === filteredEmails.length}
+                  checked={selectedEmails.size === emails.length}
                   onChange={handleSelectAll}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
@@ -590,15 +794,17 @@ export default function EmailPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
-              ) : filteredEmails.length === 0 ? (
+              ) : emails.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-500">
                   <div className="text-lg">Aucun email dans ce dossier</div>
                 </div>
               ) : (
                 <div className="divide-y">
-                  {filteredEmails.map((email) => (
+                  {emails.map((email) => (
                     <div
                       key={email.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, email.id)}
                       onClick={() => handleEmailClick(email)}
                       className={`w-full p-4 text-left flex items-start gap-4 transition-colors cursor-pointer ${
                         !email.read ? "font-semibold" : ""
@@ -693,6 +899,57 @@ export default function EmailPage() {
         </Toast.Root>
         <Toast.Viewport />
       </Toast.Provider>
+
+      {/* Modal de création de dossier */}
+      {isCreateFolderOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div
+            className={`p-6 rounded-lg ${
+              isDarkMode ? "bg-gray-800" : "bg-white"
+            } w-96`}
+          >
+            <h2 className="text-xl font-bold mb-4">Créer un nouveau dossier</h2>
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="Nom du dossier"
+              className={`w-full p-2 rounded-lg mb-4 ${
+                isDarkMode
+                  ? "bg-gray-700 text-white"
+                  : "bg-gray-100 text-gray-900"
+              }`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleCreateFolder();
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsCreateFolderOpen(false);
+                  setNewFolderName("");
+                }}
+                className="px-4 py-2 rounded-lg hover:bg-gray-200"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className={`px-4 py-2 rounded-lg ${
+                  newFolderName.trim()
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Créer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

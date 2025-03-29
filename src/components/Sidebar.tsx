@@ -72,6 +72,7 @@ export default function Sidebar() {
               width={96}
               height={96}
               className="mb-4"
+              priority
             />
             <h1 className="text-xl font-bold">WebMail</h1>
             <button onClick={() => setIsOpen(false)} className="lg:hidden">

@@ -20,7 +20,6 @@ import ContactList from "@/components/contacts/ContactList";
 import ContactModal, {
   Contact,
   ContactCategory,
-  contactCategories,
 } from "@/components/contacts/ContactModal";
 
 type SortField = "nom" | "prenom" | "email" | "entreprise" | "ville";
@@ -244,9 +243,57 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
     showToast("Contacts exportés avec succès !");
   };
 
+  const importContacts = async (file: File) => {
+    try {
+      const text = await file.text();
+      const vCards = text.split("BEGIN:VCARD").filter(Boolean);
+
+      for (const vCard of vCards) {
+        const lines = vCard.split("\n");
+        const contact: Partial<Contact> = {};
+
+        lines.forEach((line) => {
+          if (line.startsWith("N:")) {
+            const [nom, prenom] = line.slice(2).split(";");
+            contact.nom = nom;
+            contact.prenom = prenom;
+          } else if (line.startsWith("EMAIL:")) {
+            contact.email = line.slice(6);
+          } else if (line.startsWith("TEL:")) {
+            contact.telephone = line.slice(4);
+          } else if (line.startsWith("ORG:")) {
+            contact.entreprise = line.slice(4);
+          } else if (line.startsWith("ADR:")) {
+            const address = line.slice(4).split(";").filter(Boolean);
+            contact.adresse = address[2];
+            contact.codePostal = address[5];
+            contact.ville = address[6];
+          }
+        });
+
+        if (contact.nom && auth.currentUser) {
+          await handleSaveContact(contact as Contact);
+        }
+      }
+      showToast("Contacts importés avec succès");
+    } catch (error) {
+      console.error("Erreur lors de l'import:", error);
+      showToast("Erreur lors de l'import des contacts", "error");
+    }
+  };
+
   // Gestionnaire de raccourcis clavier
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      console.log(
+        "Touche pressée:",
+        e.key,
+        "Ctrl:",
+        e.ctrlKey,
+        "Meta:",
+        e.metaKey
+      );
+
       // Ne pas déclencher les raccourcis si on est dans un champ de saisie
       if (
         e.target instanceof HTMLInputElement ||
@@ -255,29 +302,39 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
         return;
       }
 
+      // Vérifier si c'est un raccourci Ctrl
       if (e.ctrlKey || e.metaKey) {
-        switch (e.key.toLowerCase()) {
-          case "n": // Nouveau contact
+        const key = e.key.toLowerCase();
+        console.log("Raccourci Ctrl détecté:", key);
+
+        switch (key) {
+          case "n":
+            console.log("Tentative d'ouverture du modal nouveau contact");
             e.preventDefault();
+            e.stopPropagation();
             setSelectedContact(undefined);
             setIsModalOpen(true);
             break;
-          case "f": // Rechercher
+          case "f":
             e.preventDefault();
+            e.stopPropagation();
             document
               .querySelector<HTMLInputElement>('input[type="text"]')
               ?.focus();
             break;
-          case "e": // Exporter
+          case "e":
             e.preventDefault();
+            e.stopPropagation();
             exportContacts();
             break;
-          case "v": // Changer de vue
+          case "v":
             e.preventDefault();
+            e.stopPropagation();
             setViewMode(viewMode === "grid" ? "list" : "grid");
             break;
-          case "c": // Copier les informations du contact sélectionné
+          case "c":
             e.preventDefault();
+            e.stopPropagation();
             if (selectedContact) {
               const contactInfo = [
                 `${selectedContact.prenom} ${selectedContact.nom}`,
@@ -298,120 +355,79 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
               showToast("Informations du contact copiées", "success");
             }
             break;
-          case "m": // Ouvrir Google Maps pour le contact sélectionné
+          case "m":
             e.preventDefault();
-            if (
-              selectedContact?.adresse &&
-              selectedContact?.ville &&
-              selectedContact?.codePostal
-            ) {
-              const query = encodeURIComponent(
-                `${selectedContact.adresse}, ${selectedContact.codePostal} ${selectedContact.ville}`
-              );
-              window.open(
-                `https://www.google.com/maps/search/?api=1&query=${query}`,
-                "_blank"
-              );
+            e.stopPropagation();
+            if (selectedContact) {
+              const address = [
+                selectedContact.adresse,
+                selectedContact.codePostal,
+                selectedContact.ville,
+              ]
+                .filter(Boolean)
+                .join(", ");
+              if (address) {
+                const query = encodeURIComponent(address);
+                window.open(
+                  `https://www.google.com/maps/search/?api=1&query=${query}`,
+                  "_blank"
+                );
+              }
             }
             break;
-          case "p": // Appeler le contact sélectionné
+          case "p":
             e.preventDefault();
+            e.stopPropagation();
             if (selectedContact?.telephone) {
-              window.location.href = `tel:${selectedContact.telephone}`;
+              window.location.href = `tel:${selectedContact.telephone.replace(
+                /\s/g,
+                ""
+              )}`;
             }
             break;
-          case "i": // Envoyer un email au contact sélectionné
+          case "i":
             e.preventDefault();
+            e.stopPropagation();
             if (selectedContact?.email) {
               window.location.href = `mailto:${selectedContact.email}`;
             }
             break;
         }
       } else if (e.key === "Escape" && isModalOpen) {
+        e.preventDefault();
+        e.stopPropagation();
         setIsModalOpen(false);
         setSelectedContact(undefined);
       }
     };
 
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
+    // Utiliser keydown avec capture pour intercepter les événements avant qu'ils n'atteignent le navigateur
+    window.addEventListener("keydown", handleKeyPress, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleKeyPress, { capture: true });
   }, [isModalOpen, viewMode, selectedContact]);
 
-  // Fonction pour importer des contacts
-  const importContacts = async (file: File) => {
-    try {
-      const text = await file.text();
-      const contacts = [];
-      let currentContact: Partial<Contact> = {};
-
-      // Parser le fichier vCard
-      const lines = text.split("\n");
-      for (const line of lines) {
-        const [key, value] = line.split(":");
-
-        if (key === "BEGIN" && value.trim() === "VCARD") {
-          currentContact = {};
-        } else if (key === "END" && value.trim() === "VCARD") {
-          if (
-            currentContact.nom &&
-            currentContact.prenom &&
-            currentContact.email
-          ) {
-            contacts.push({
-              ...currentContact,
-              id: crypto.randomUUID(),
-              userId: auth.currentUser?.uid || "",
-              categorie: "personal" as ContactCategory,
-              telephone: currentContact.telephone || "",
-            } as Contact);
-          }
-        } else if (key === "N") {
-          const [nom, prenom] = value.split(";");
-          currentContact.nom = nom.trim();
-          currentContact.prenom = prenom.trim();
-        } else if (key === "EMAIL") {
-          currentContact.email = value.trim();
-        } else if (key === "TEL") {
-          currentContact.telephone = value.trim();
-        } else if (key === "ORG") {
-          currentContact.entreprise = value.trim();
-          currentContact.categorie = "professional" as ContactCategory;
-        } else if (key === "ADR") {
-          const [, , street, city, , postal] = value.split(";");
-          currentContact.adresse = street.trim();
-          currentContact.ville = city.trim();
-          currentContact.codePostal = postal.trim();
-        } else if (key === "NOTE") {
-          currentContact.notes = value.trim();
-        }
-      }
-
-      // Sauvegarder les contacts dans Firebase
-      for (const contact of contacts) {
-        await addDoc(collection(db, "contacts"), contact);
-      }
-
-      // Recharger les contacts
-      const contactsRef = collection(db, "contacts");
-      const q = query(
-        contactsRef,
-        where("userId", "==", auth.currentUser?.uid)
-      );
-      const querySnapshot = await getDocs(q);
-      const loadedContacts = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        categorie: (doc.data().categorie ||
-          "personal") as keyof typeof contactCategories,
-      })) as Contact[];
-
-      setContacts(loadedContacts);
-      showToast(`${contacts.length} contacts importés avec succès !`);
-    } catch (error) {
-      console.error("Erreur lors de l'importation :", error);
-      showToast("Erreur lors de l'importation des contacts", "error");
-    }
-  };
+  // Ajouter un composant pour afficher les raccourcis disponibles
+  const ShortcutsHelp = () => (
+    <div
+      className={`fixed bottom-4 left-[300px] p-4 rounded-lg shadow-lg ${
+        isDarkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
+      }`}
+    >
+      <h3 className="text-sm font-medium mb-2">Raccourcis clavier</h3>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>Ctrl + N : Nouveau contact</div>
+        <div>Ctrl + F : Rechercher</div>
+        <div>Ctrl + E : Exporter</div>
+        <div>Ctrl + V : Changer de vue</div>
+        <div>Ctrl + C : Copier les infos</div>
+        <div>Ctrl + M : Ouvrir Maps</div>
+        <div>Ctrl + P : Appeler</div>
+        <div>Ctrl + I : Envoyer email</div>
+        <div>Échap : Fermer modal</div>
+      </div>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -570,6 +586,8 @@ ${contact.entreprise ? `ORG:${contact.entreprise}\n` : ""}${
           </div>
         ))}
       </div>
+
+      <ShortcutsHelp />
     </div>
   );
 }
