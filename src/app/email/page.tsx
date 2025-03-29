@@ -35,17 +35,6 @@ import { fr } from "date-fns/locale";
 import EmailConfig from "@/components/email/EmailConfig";
 import * as Toast from "@radix-ui/react-toast";
 
-// Fonction pour nettoyer le HTML
-const stripHtml = (html: string) => {
-  if (typeof window === "undefined") return html;
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return doc.body.textContent || "";
-  } catch (error) {
-    return html.replace(/<[^>]*>/g, "");
-  }
-};
-
 interface Email {
   id: string;
   from: string;
@@ -93,6 +82,7 @@ export default function EmailPage() {
   const [selectedAccount, setSelectedAccount] = useState<EmailAccount | null>(
     null
   );
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -405,6 +395,53 @@ export default function EmailPage() {
     }
   };
 
+  const handleSelectEmail = (
+    emailId: string,
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    event.stopPropagation();
+    setSelectedEmails((prev) => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(emailId)) {
+        newSelected.delete(emailId);
+      } else {
+        newSelected.add(emailId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedEmails.size === filteredEmails.length) {
+      setSelectedEmails(new Set());
+    } else {
+      setSelectedEmails(new Set(filteredEmails.map((email) => email.id)));
+    }
+  };
+
+  const handleMoveEmails = async (targetFolder: Folder) => {
+    try {
+      const promises = Array.from(selectedEmails).map((emailId) => {
+        const emailRef = doc(db, "emails", emailId);
+        return updateDoc(emailRef, {
+          folder: targetFolder,
+        });
+      });
+
+      await Promise.all(promises);
+
+      // Mettre à jour l'état local
+      setEmails(emails.filter((email) => !selectedEmails.has(email.id)));
+      setSelectedEmails(new Set());
+      setToastMessage(`Emails déplacés vers ${targetFolder}`);
+      setShowToast(true);
+    } catch (error) {
+      console.error("Erreur lors du déplacement des emails:", error);
+      setToastMessage("Erreur lors du déplacement des emails");
+      setShowToast(true);
+    }
+  };
+
   return (
     <div
       className={`h-screen flex ${
@@ -463,6 +500,26 @@ export default function EmailPage() {
       <div className="flex-1 flex flex-col">
         <div className="p-4 border-b flex justify-between items-center">
           <div className="flex items-center gap-2">
+            {selectedEmails.size > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleMoveEmails("archive")}
+                  className={`px-3 py-1 rounded-lg transition-colors ${
+                    isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
+                  }`}
+                >
+                  Archiver
+                </button>
+                <button
+                  onClick={() => handleMoveEmails("trash")}
+                  className={`px-3 py-1 rounded-lg transition-colors ${
+                    isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
+                  }`}
+                >
+                  Corbeille
+                </button>
+              </div>
+            )}
             <button
               onClick={syncEmails}
               disabled={isSyncing}
@@ -493,6 +550,19 @@ export default function EmailPage() {
           <>
             {/* Barre de recherche */}
             <div className="p-4 border-b flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedEmails.size === filteredEmails.length}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-500">
+                  {selectedEmails.size > 0
+                    ? `${selectedEmails.size} sélectionné(s)`
+                    : "Tout sélectionner"}
+                </span>
+              </div>
               <div className="flex-1 relative">
                 <input
                   type="text"
@@ -536,30 +606,53 @@ export default function EmailPage() {
                         isDarkMode
                           ? "hover:bg-gray-800 divide-gray-700"
                           : "hover:bg-gray-100 divide-gray-200"
+                      } ${
+                        selectedEmails.has(email.id)
+                          ? isDarkMode
+                            ? "bg-gray-800"
+                            : "bg-gray-100"
+                          : ""
                       }`}
                     >
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStarEmail(email);
-                        }}
-                        className={`flex-shrink-0 cursor-pointer ${
-                          email.starred ? "text-yellow-400" : "text-gray-400"
-                        }`}
-                      >
-                        <Star size={20} />
+                      <div className="flex flex-col items-center gap-5">
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStarEmail(email);
+                          }}
+                          className={`flex-shrink-0 cursor-pointer ${
+                            email.starred ? "text-yellow-400" : "text-gray-400"
+                          }`}
+                        >
+                          <Star size={20} />
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={selectedEmails.has(email.id)}
+                          onChange={(e) => handleSelectEmail(email.id, e)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="truncate">{email.from}</span>
+                          <span className="truncate">
+                            {email.from.replace(/['"]/g, "")}
+                          </span>
                           <span className="text-sm text-gray-500">
-                            {new Date(email.timestamp).toLocaleDateString()}
+                            {new Date(email.timestamp).toLocaleDateString(
+                              "fr-FR",
+                              {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )}
                           </span>
                         </div>
                         <div className="truncate">{email.subject}</div>
-                        <div className="text-sm text-gray-500 truncate">
-                          {stripHtml(email.content)}
-                        </div>
                       </div>
                     </div>
                   ))}

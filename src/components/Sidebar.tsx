@@ -10,15 +10,18 @@ import {
   Menu,
   X,
   LogOut,
+  Home,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { auth } from "@/config/firebase";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const menuItems = [
+  { href: "/app", icon: Home, label: "Accueil" },
   { href: "/calendar", icon: Calendar, label: "Calendrier" },
-  { href: "/email", icon: Mail, label: "Email" },
+  { href: "/email", icon: Mail, label: "Emails" },
   { href: "/contacts", icon: Users, label: "Contacts" },
 ];
 
@@ -62,7 +65,14 @@ export default function Sidebar() {
         } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col items-center mb-8">
+            <Image
+              src="/logo-96x96.png"
+              alt="WebMail Logo"
+              width={96}
+              height={96}
+              className="mb-4"
+            />
             <h1 className="text-xl font-bold">WebMail</h1>
             <button onClick={() => setIsOpen(false)} className="lg:hidden">
               <X size={24} />
@@ -72,17 +82,19 @@ export default function Sidebar() {
           {/* Navigation */}
           <nav className="flex-1">
             <ul className="space-y-2">
-              {menuItems.map(({ href, label, icon: Icon }) => (
-                <li key={href}>
+              {menuItems.map((item) => (
+                <li key={item.href}>
                   <Link
-                    href={href}
+                    href={item.href}
                     className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
-                      pathname === href ? "bg-blue-600" : "hover:bg-gray-700"
+                      pathname === item.href
+                        ? "bg-blue-600"
+                        : "hover:bg-gray-700"
                     }`}
                     onClick={() => setIsOpen(false)}
                   >
-                    <Icon size={20} />
-                    <span>{label}</span>
+                    <item.icon size={20} />
+                    <span>{item.label}</span>
                   </Link>
                 </li>
               ))}

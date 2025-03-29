@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import imaps from "imap-simple";
-import { simpleParser, AddressObject } from "mailparser";
-import { adminApp, adminDb, adminAuth } from "@/config/firebase-admin";
+import { simpleParser } from "mailparser";
+import { adminDb } from "@/config/firebase-admin";
 import CryptoJS from "crypto-js";
 
 interface EmailData {
@@ -15,6 +15,7 @@ interface EmailData {
   starred: boolean;
   folder: string;
   userId: string;
+  selected: boolean;
   attachments?: Array<{
     filename: string;
     contentType: string;
@@ -57,29 +58,6 @@ const decryptPassword = (encryptedPassword: string) => {
     }
     throw new Error("Erreur inconnue lors du décryptage du mot de passe");
   }
-};
-
-const cleanEmailData = (email: EmailData): EmailData => {
-  const cleanData: EmailData = {
-    messageId: email.messageId || "",
-    from: email.from || "",
-    to: email.to || "",
-    subject: email.subject || "",
-    content: email.content || "",
-    timestamp: email.timestamp || new Date(),
-    read: false,
-    starred: false,
-    folder: "inbox",
-    userId: email.userId,
-    attachments: email.attachments?.map((att) => ({
-      filename: att.filename || "",
-      contentType: att.contentType || "",
-      size: att.size || 0,
-      content: att.content || "",
-    })),
-  };
-
-  return cleanData;
 };
 
 export async function POST(request: Request) {
@@ -189,6 +167,7 @@ export async function POST(request: Request) {
               read: false,
               starred: false,
               folder: "inbox",
+              selected: false,
             } as EmailData;
           })
         );

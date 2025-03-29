@@ -225,10 +225,11 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
   };
 
   const resetToIonosDefaults = () => {
-    setSettings((prev) => ({
-      ...prev,
+    setSettings({
+      email: "",
+      emailPassword: "",
       ...defaultIonosSettings,
-    }));
+    });
     setError(null);
     setSuccess(null);
   };
@@ -287,6 +288,7 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
                         : "bg-gray-50 text-gray-900 placeholder-gray-500"
                     } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                     required
+                    autoComplete="off"
                   />
                 </div>
                 <div>
@@ -309,6 +311,7 @@ export default function EmailConfig({ isOpen, onClose }: EmailConfigProps) {
                           : "bg-gray-50 text-gray-900 placeholder-gray-500"
                       } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                       required
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
