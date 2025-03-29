@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, FormEvent, ChangeEvent } from "react";
 import { X, Paperclip, Trash2 } from "lucide-react";
 import { Dialog as HeadlessDialog } from "@headlessui/react";
 import { useTheme } from "@/context/ThemeContext";
@@ -15,12 +15,19 @@ interface ComposeModalProps {
     subject: string;
     content: string;
     attachments?: File[];
+    accountId?: string;
   }) => Promise<void>;
   initialData?: {
     to: string;
     subject: string;
     content: string;
   } | null;
+  accountId?: string;
+}
+
+interface Attachment {
+  file: File;
+  size: number;
 }
 
 export default function ComposeModal({
@@ -28,6 +35,7 @@ export default function ComposeModal({
   onClose,
   onSend,
   initialData,
+  accountId,
 }: ComposeModalProps) {
   const { isDarkMode } = useTheme();
   const [to, setTo] = useState("");
@@ -39,6 +47,33 @@ export default function ComposeModal({
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("error");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [signature, setSignature] = useState("");
+  const [signatureImage, setSignatureImage] = useState<File | null>(null);
+  const [signatureImagePreview, setSignatureImagePreview] =
+    useState<string>("");
+
+  const defaultSignature = `
+<table style="font-family: Arial, sans-serif; color: #333333; border-top: 1px solid #dddddd; padding-top: 10px; margin-top: 20px;">
+  <tr>
+    <td style="vertical-align: top; padding-right: 15px;">
+      <img src="${window.location.origin}/Avatar.png" alt="Grohens Christian" style="width: 100px; height: auto; border-radius: 10px;">
+    </td>
+    <td style="vertical-align: top;">
+      <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">Grohens Christian</div>
+      <div style="font-size: 14px; margin-bottom: 4px;">Développeur web <span style="color: #666666;">Freelance</span></div>
+      <div style="font-size: 14px; color: #666666; margin-bottom: 4px;">Expert Technique</div>
+      <div style="font-size: 14px; color: #666666; margin-bottom: 4px;">5, rue Maurice Fonvieille</div>
+      <div style="font-size: 14px; color: #666666; margin-bottom: 8px;">31120 Portet sur Garonne</div>
+      <div style="font-size: 14px; margin-bottom: 4px;">09 52 62 31 71</div>
+      <div style="margin-bottom: 8px;"><a href="http://www.javachrist.fr" style="color: #0066cc; text-decoration: none;">www.javachrist.fr</a></div>
+      <div style="display: flex; gap: 10px;">
+        <a href="https://github.com/javachrist" style="text-decoration: none;"><img src="${window.location.origin}/github-icon.svg" alt="GitHub" style="width: 24px; height: 24px; filter: invert(20%);"></a>
+        <a href="https://linkedin.com/in/christian-grohens" style="text-decoration: none;"><img src="${window.location.origin}/linkedin-icon.svg" alt="LinkedIn" style="width: 24px; height: 24px; filter: invert(20%);"></a>
+        <a href="https://twitter.com/javachrist" style="text-decoration: none;"><img src="${window.location.origin}/twitter-icon.svg" alt="Twitter" style="width: 24px; height: 24px; filter: invert(20%);"></a>
+      </div>
+    </td>
+  </tr>
+</table>`;
 
   useEffect(() => {
     if (initialData) {
@@ -51,39 +86,51 @@ export default function ComposeModal({
       setContent("");
     }
     setAttachments([]);
+    setSignature("");
+    setSignatureImage(null);
+    setSignatureImagePreview("");
   }, [initialData]);
 
-  const resetForm = () => {
-    setTo("");
-    setSubject("");
-    setContent("");
-    setAttachments([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+  const handleSignatureImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSignatureImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSignatureImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("Valeurs du formulaire:", { to, subject, content });
-
-    if (!to || !subject || !content) {
-      setToastMessage("Veuillez remplir tous les champs obligatoires");
-      setToastType("error");
-      setShowToast(true);
-      return;
-    }
-
     setIsSending(true);
+
     try {
-      const emailData = { to, subject, content, attachments };
-      console.log("Données envoyées:", emailData);
-      await onSend(emailData);
+      if (!accountId) {
+        setToastMessage("Veuillez configurer un compte email");
+        setToastType("error");
+        setShowToast(true);
+        return;
+      }
+
+      // Ajouter la signature au contenu
+      const finalContent = `${content}\n\n${defaultSignature}`;
+
+      await onSend({
+        to,
+        subject,
+        content: finalContent,
+        attachments,
+        accountId,
+      });
+
       setToastMessage("Email envoyé avec succès");
       setToastType("success");
       setShowToast(true);
       resetForm();
-      onClose();
+      setTimeout(onClose, 3000);
     } catch (error) {
       console.error("Erreur lors de l'envoi de l'email:", error);
       setToastMessage(
@@ -98,7 +145,20 @@ export default function ComposeModal({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resetForm = () => {
+    setTo("");
+    setSubject("");
+    setContent("");
+    setAttachments([]);
+    setSignature("");
+    setSignatureImage(null);
+    setSignatureImagePreview("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const totalSize = files.reduce((acc, file) => acc + file.size, 0);
     const maxSize = 25 * 1024 * 1024; // 25 MB
@@ -124,14 +184,30 @@ export default function ComposeModal({
       <HeadlessDialog open={isOpen} onClose={onClose} className="relative z-50">
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <HeadlessDialog.Panel className="w-full max-w-2xl bg-gray-900 rounded-lg shadow-xl">
-            <div className="flex justify-between items-center p-4 border-b border-gray-700">
-              <HeadlessDialog.Title className="text-xl font-semibold text-white">
+          <HeadlessDialog.Panel
+            className={`w-full max-w-5xl ${
+              isDarkMode ? "bg-gray-900" : "bg-white"
+            } rounded-lg shadow-xl`}
+          >
+            <div
+              className={`flex justify-between items-center p-4 border-b ${
+                isDarkMode ? "border-gray-700" : "border-gray-200"
+              }`}
+            >
+              <HeadlessDialog.Title
+                className={`text-xl font-semibold ${
+                  isDarkMode ? "text-white" : "text-gray-900"
+                }`}
+              >
                 Nouveau message
               </HeadlessDialog.Title>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-white"
+                className={`${
+                  isDarkMode
+                    ? "text-gray-400 hover:text-white"
+                    : "text-gray-500 hover:text-gray-900"
+                }`}
               >
                 <X size={24} />
               </button>
@@ -140,44 +216,70 @@ export default function ComposeModal({
             <form onSubmit={handleSubmit} className="p-4">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label
+                    className={`block text-sm font-medium ${
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    } mb-1`}
+                  >
                     À
                   </label>
                   <input
                     type="email"
                     value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setTo(e.target.value)
+                    }
+                    className={`w-full ${
+                      isDarkMode
+                        ? "bg-gray-800 text-white border-gray-700"
+                        : "bg-white text-gray-900 border-gray-300"
+                    } border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                     placeholder="destinataire@example.com"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label
+                    className={`block text-sm font-medium ${
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    } mb-1`}
+                  >
                     Objet
                   </label>
                   <input
                     type="text"
                     value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setSubject(e.target.value)
+                    }
+                    className={`w-full ${
+                      isDarkMode
+                        ? "bg-gray-800 text-white border-gray-700"
+                        : "bg-white text-gray-900 border-gray-300"
+                    } border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                     placeholder="Objet du message"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label
+                    className={`block text-sm font-medium ${
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    } mb-1`}
+                  >
                     Message
                   </label>
                   <Editor
-                    apiKey=""
+                    apiKey="70b33lmeqg4gkor74cmflrnzyabu1cn9ft6mrs8dttbjvm3z"
                     value={content}
-                    onEditorChange={(content) => setContent(content)}
+                    onEditorChange={(content: string) => setContent(content)}
                     init={{
                       height: 300,
-                      menubar: false,
+                      menubar: true,
+                      skin: isDarkMode ? "oxide-dark" : "oxide",
+                      content_css: isDarkMode ? "dark" : "default",
                       plugins: [
                         "advlist",
                         "autolink",
@@ -194,29 +296,90 @@ export default function ComposeModal({
                         "insertdatetime",
                         "media",
                         "table",
-                        "code",
                         "help",
                         "wordcount",
                       ],
                       toolbar:
-                        "undo redo | blocks | " +
-                        "bold italic backcolor | alignleft aligncenter " +
-                        "alignright alignjustify | bullist numlist outdent indent | " +
-                        "removeformat | help",
+                        "undo redo | formatselect | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help",
                       content_style:
                         "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
-                      skin: isDarkMode ? "oxide-dark" : "oxide",
-                      content_css: isDarkMode ? "dark" : "default",
                       promotion: false,
                       branding: false,
-                      base_url: "/tinymce",
-                      suffix: ".min",
+                      icons: "default",
                     }}
                   />
                 </div>
 
+                {/* Signature */}
+                <div className="space-y-2">
+                  <label
+                    className={`block text-sm font-medium ${
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    }`}
+                  >
+                    Signature
+                  </label>
+                  <textarea
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder="Votre signature..."
+                    className={`w-full p-2 rounded-lg ${
+                      isDarkMode
+                        ? "bg-gray-800 text-white"
+                        : "bg-white text-gray-900"
+                    } border ${
+                      isDarkMode ? "border-gray-700" : "border-gray-300"
+                    } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                    rows={3}
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSignatureImageChange}
+                      className="hidden"
+                      id="signature-image"
+                    />
+                    <label
+                      htmlFor="signature-image"
+                      className={`px-4 py-2 rounded-lg cursor-pointer ${
+                        isDarkMode
+                          ? "bg-gray-800 hover:bg-gray-700"
+                          : "bg-gray-100 hover:bg-gray-200"
+                      }`}
+                    >
+                      Ajouter une image
+                    </label>
+                    {signatureImage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureImage(null);
+                          setSignatureImagePreview("");
+                        }}
+                        className="text-red-500 hover:text-red-600"
+                      >
+                        Supprimer l'image
+                      </button>
+                    )}
+                  </div>
+                  {signatureImagePreview && (
+                    <div className="mt-2">
+                      <img
+                        src={signatureImagePreview}
+                        alt="Aperçu de la signature"
+                        className="max-h-20 object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label
+                    className={`block text-sm font-medium ${
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    } mb-1`}
+                  >
                     Pièces jointes
                   </label>
                   <div className="flex items-center space-x-2">
@@ -230,26 +393,43 @@ export default function ComposeModal({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                      className={`px-3 py-2 ${
+                        isDarkMode
+                          ? "bg-blue-600 text-white"
+                          : "bg-blue-500 text-white"
+                      } rounded-lg hover:bg-${
+                        isDarkMode ? "blue-700" : "blue-600"
+                      } transition-colors flex items-center space-x-2`}
                     >
                       <Paperclip size={16} />
                       <span>Ajouter des pièces jointes</span>
                     </button>
                   </div>
+
                   {attachments.length > 0 && (
                     <div className="mt-2 space-y-2">
-                      {attachments.map((file, index) => (
+                      {attachments.map((file: File, index: number) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between bg-gray-800 p-2 rounded-lg"
+                          className={`flex items-center justify-between ${
+                            isDarkMode ? "bg-gray-800" : "bg-gray-200"
+                          } p-2 rounded-lg`}
                         >
-                          <span className="text-sm text-gray-300">
+                          <span
+                            className={`text-sm ${
+                              isDarkMode ? "text-gray-300" : "text-gray-700"
+                            } truncate`}
+                          >
                             {file.name}
                           </span>
                           <button
                             type="button"
                             onClick={() => removeAttachment(index)}
-                            className="text-red-500 hover:text-red-400"
+                            className={`${
+                              isDarkMode
+                                ? "text-gray-400 hover:text-red-500"
+                                : "text-gray-500 hover:text-red-500"
+                            }`}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -258,40 +438,50 @@ export default function ComposeModal({
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-gray-300 hover:text-white"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSending ? "Envoi en cours..." : "Envoyer"}
-                </button>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className={`px-4 py-2 ${
+                      isDarkMode
+                        ? "text-gray-300 hover:text-white"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSending}
+                    className={`px-4 py-2 ${
+                      isDarkMode
+                        ? "bg-blue-600 text-white"
+                        : "bg-blue-500 text-white"
+                    } rounded-lg hover:bg-${
+                      isDarkMode ? "blue-700" : "blue-600"
+                    } transition-colors disabled:opacity-50`}
+                  >
+                    {isSending ? "Envoi en cours..." : "Envoyer"}
+                  </button>
+                </div>
               </div>
             </form>
           </HeadlessDialog.Panel>
         </div>
       </HeadlessDialog>
 
-      <Toast.Provider>
-        <Toast.Root
-          open={showToast}
-          onOpenChange={setShowToast}
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-            toastType === "success" ? "bg-green-500" : "bg-red-500"
-          } text-white`}
-        >
-          <Toast.Title className="font-medium">{toastMessage}</Toast.Title>
-        </Toast.Root>
-      </Toast.Provider>
+      {showToast && (
+        <Toast.Provider>
+          <Toast.Root
+            className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
+              toastType === "success" ? "bg-green-500" : "bg-red-500"
+            } text-white`}
+          >
+            <Toast.Title className="font-medium">{toastMessage}</Toast.Title>
+          </Toast.Root>
+        </Toast.Provider>
+      )}
     </>
   );
 }

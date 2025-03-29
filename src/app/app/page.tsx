@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/config/firebase";
@@ -22,11 +22,9 @@ export default function AppPage() {
   const router = useRouter();
   const { isDarkMode } = useTheme();
 
-  const loadUnreadEmails = async (userId: string) => {
+  const loadUnreadEmails = useCallback(async (userId: string) => {
     try {
-      console.log("Chargement des emails non lus pour:", userId);
       const emailsRef = collection(db, "emails");
-
       const q = query(
         emailsRef,
         where("userId", "==", userId),
@@ -34,8 +32,6 @@ export default function AppPage() {
       );
 
       const querySnapshot = await getDocs(q);
-      console.log("Nombre d'emails trouvés:", querySnapshot.size);
-
       const emails = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -44,49 +40,37 @@ export default function AppPage() {
       emails.sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
       const limitedEmails = emails.slice(0, 15);
 
-      console.log("Emails chargés:", limitedEmails);
-      console.log("État unreadEmails avant mise à jour:", unreadEmails);
       setUnreadEmails(limitedEmails);
-      console.log("État unreadEmails après mise à jour:", limitedEmails);
     } catch (error) {
       console.error("Erreur lors du chargement des emails:", error);
       setUnreadEmails([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    console.log("Démarrage de l'effet useEffect");
+    let refreshInterval: NodeJS.Timeout;
+
     const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
-      console.log(
-        "État d'authentification changé:",
-        user ? "Connecté" : "Non connecté"
-      );
       if (user) {
         setUserEmail(user.email);
         await loadUnreadEmails(user.uid);
-        // Ajouter un intervalle de rafraîchissement
-        const refreshInterval = setInterval(() => {
+        refreshInterval = setInterval(() => {
           loadUnreadEmails(user.uid);
         }, 30000); // Rafraîchir toutes les 30 secondes
         setIsLoading(false);
-        return () => clearInterval(refreshInterval);
       } else {
         setIsLoading(false);
         router.push("/login");
-        return () => {};
       }
     });
 
     return () => {
-      console.log("Nettoyage de l'effet useEffect");
       unsubscribe();
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
     };
-  }, [router]);
-
-  // Ajouter un effet pour surveiller l'état de chargement
-  useEffect(() => {
-    console.log("État de chargement changé:", isLoading);
-  }, [isLoading]);
+  }, [router, loadUnreadEmails]);
 
   if (isLoading) {
     return (

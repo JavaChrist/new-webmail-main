@@ -207,7 +207,9 @@ export default function EmailView({
 
         {/* Contenu HTML */}
         <div
-          className="prose max-w-none"
+          className={`prose max-w-none ${
+            isDarkMode ? "prose-invert" : ""
+          } prose-sm sm:prose lg:prose-lg xl:prose-xl mx-auto`}
           dangerouslySetInnerHTML={{ __html: email.content }}
         />
       </div>

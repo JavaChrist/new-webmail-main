@@ -2,17 +2,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { X } from "lucide-react";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
-import { db, auth } from "@/config/firebase";
 
 // Types et constantes
 export const contactCategories = {

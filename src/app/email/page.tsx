@@ -184,6 +184,7 @@ export default function EmailPage() {
     subject: string;
     content: string;
     attachments?: File[];
+    accountId?: string;
   }) => {
     if (!auth.currentUser) return;
 
@@ -238,6 +239,7 @@ export default function EmailPage() {
           content: emailData.content,
           userId: auth.currentUser.uid,
           emailId: emailRef.id,
+          accountId: selectedAccount?.id,
           isHtml: true,
           files,
         }),
@@ -877,6 +879,7 @@ export default function EmailPage() {
         }}
         onSend={handleSendEmail}
         initialData={replyData}
+        accountId={selectedAccount?.id}
       />
 
       <EmailConfig

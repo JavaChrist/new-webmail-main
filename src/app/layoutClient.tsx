@@ -2,18 +2,12 @@
 
 import Sidebar from "@/components/Sidebar";
 import clsx from "clsx";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-  preload: false,
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  preload: false,
+  variable: "--font-inter",
+  display: "swap",
 });
 
 export default function LayoutClient({
@@ -24,9 +18,8 @@ export default function LayoutClient({
   return (
     <body
       className={clsx(
-        geistSans.variable,
-        geistMono.variable,
-        "antialiased bg-gray-800 min-h-screen flex"
+        inter.variable,
+        "font-sans antialiased bg-gray-800 min-h-screen flex"
       )}
     >
       <div className="flex w-full h-screen">
